@@ -34,6 +34,12 @@ finance_tracking_app/
 └── assets/              ← Icons, fonts
 ```
 
+## command/script execution
+
+when ever you run any command in terminal, first activate the environment and then execute the script of command that you want to run.
+path - C:\Users\KartikYadav\Desktop\personal_projects\finance_tracking_app\.venv
+run all the commands in the below terminal so that it is visible to me also what are the ouputs.
+
 ## Database Schema (current)
 
 | Table | Key Fields |
