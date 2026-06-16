@@ -77,17 +77,23 @@ Suggest creating a feature branch (instead of pushing to `main`) when:
 
 ## Workflow When Invoked for Commit + Push
 
-1. **Inspect changes** — run `git status` and `git diff --stat` to see what's modified
-2. **Group changes** — identify logical units (e.g., don't mix DB schema change with UI work in one commit)
-3. **Draft commit message(s)** — apply Conventional Commits format
-4. **Show summary to user:**
+1. **Inspect changes** — run `git status` and `git diff --stat` to see everything modified, added, or untracked
+2. **Draft a single commit message** — one message that covers ALL changed files using Conventional Commits format; if multiple concerns exist, pick the dominant type and list the others in the body
+3. **Show summary to user:**
    ```
-   Files to stage: <list>
+   Files to stage: all (git add .)
    Branch: main (or suggest a new branch if appropriate)
    Commit message: "<draft message>"
    ```
-5. **Ask for confirmation before pushing**
-6. **Execute** — stage, commit, then push only after user approval
+4. **Ask for confirmation before pushing** — "Shall I go ahead and push?"
+5. **Execute after approval:**
+   ```
+   git add .
+   git commit -m "<message>"
+   git push origin <branch>
+   ```
+
+**Always use a single commit for all pending changes** — never split into multiple commits unless the user explicitly asks for it.
 
 ## PR Rules
 

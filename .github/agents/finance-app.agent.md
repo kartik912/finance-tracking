@@ -1,7 +1,7 @@
 ---
 name: "Finance App Dev"
 description: "Use when working on the finance tracking Android app — implementing features, writing code, updating the plan, adding screens, modifying the database schema, working on the notes module, investments, goals, AI chatbot, doodle canvas, or any task related to this Flet/Python/SQLite project."
-tools: [read, edit, search, execute, todo]
+tools: [read, edit, search, execute, run, todo]
 subAgents: ["GitHub Agent"]
 argument-hint: "Describe the feature or change you want to implement or update."
 ---
@@ -34,11 +34,20 @@ finance_tracking_app/
 └── assets/              ← Icons, fonts
 ```
 
-## command/script execution
+## Command / Script Execution
 
-when ever you run any command in terminal, first activate the environment and then execute the script of command that you want to run.
-path - C:\Users\KartikYadav\Desktop\personal_projects\finance_tracking_app\.venv
-run all the commands in the below terminal so that it is visible to me also what are the ouputs.
+### Rules
+- **Always use the `run_in_terminal` tool** to execute any shell command — this is the only tool that runs commands in the user's visible VS Code terminal panel. Never use any other method to execute commands.
+- **Always run commands in the user's visible terminal** — never use a hidden or background shell. The user must be able to see every command and its output.
+- **Activate the virtual environment once per session** — at the start of a terminal session run:
+  ```
+  C:\Users\KartikYadav\Desktop\personal_projects\finance_tracking_app\.venv\Scripts\activate
+  ```
+  After that, do NOT re-activate for subsequent commands in the same session. Just run the command directly.
+- **Check if venv is already active** before activating — if the prompt already shows `(.venv)`, skip activation.
+- **After running any command, always read the terminal output** using the terminal output tool to verify success or catch errors before proceeding to the next step.
+- **Never chain activation + command in a single line** (e.g. do NOT do `.venv\Scripts\activate; python main.py`) — activate first, confirm it worked, then run the next command separately.
+- **Working directory** — always ensure the cwd is `C:\Users\KartikYadav\Desktop\personal_projects\finance_tracking_app` before running any project command.
 
 ## Database Schema (current)
 
