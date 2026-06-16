@@ -2,6 +2,7 @@
 name: "Finance App Dev"
 description: "Use when working on the finance tracking Android app — implementing features, writing code, updating the plan, adding screens, modifying the database schema, working on the notes module, investments, goals, AI chatbot, doodle canvas, or any task related to this Flet/Python/SQLite project."
 tools: [read, edit, search, execute, todo]
+subAgents: ["GitHub Agent"]
 argument-hint: "Describe the feature or change you want to implement or update."
 ---
 
@@ -63,15 +64,61 @@ finance_tracking_app/
 
 ## Implementation Phase Tracker
 
-When implementing, always check which phase the task belongs to and mark progress:
+Always identify which phase and sub-task applies before writing any code. Phases must be completed in order — Phase 4 depends on Phase 2 + 3. Mark progress in `README.md` when a sub-task is done.
 
-- **Phase 1** — Scaffold, DB, models, CRUD, cache, app shell ← START HERE
-- **Phase 2** — Finance tracker: transactions, categories, people, debts, splits
-- **Phase 3** — Investments + Goals
-- **Phase 4** — Dashboard (depends on Phase 2+3)
-- **Phase 5** — Notes: notebooks, text/image/doodle editor
-- **Phase 6** — AI Chatbot (Gemini)
-- **Phase 7** — Polish, theme, APK build
+### Phase 1 — Project Scaffold & Database ← START HERE
+
+- **1.1 Environment setup** — `pip install flet google-generativeai pillow cachetools`, create full folder structure, `requirements.txt`, `pyproject.toml`
+- **1.2 Database init** (`db/database.py`) — `get_connection()` singleton with `row_factory`, WAL mode (`PRAGMA journal_mode=WAL`), `create_tables()` for all 12 tables, `run_migration(version)` for schema changes
+- **1.3 Data models** (`db/models.py`) — one `@dataclass` per table with `from_row()` and `to_dict()`
+- **1.4 CRUD service** (`services/db_service.py`) — `insert`, `get_all`, `get_by_id`, `update`, `delete` — no raw SQL in screens; writes auto-invalidate cache
+- **1.5 Cache service** (`services/cache_service.py`) — `LRUCache` (max 128) for list queries; `TTLCache` (60s) for aggregates; `invalidate(key)` called on every write
+- **1.6 App shell** (`main.py`) — global theme, 5-tab `NavigationBar`, `on_navigation_change`, routing via `page.go(route)`
+
+### Phase 2 — Finance Tracker
+
+- **2.1 Transaction list** — month/year selector, scrollable list grouped by date, `TransactionCard` (category icon + amount), `ft.Dismissible` swipe-to-delete, FAB to add
+- **2.2 Add/Edit modal** — amount numpad, description, category chips, date picker, expense/income toggle, optional person link
+- **2.3 Category system** — user-created categories with name, icon (preset set), and color; stored in `categories` table; shown as horizontal chip row in forms; manage screen to add/edit/delete; default seed on first launch (Food, Transport, Bills, etc.)
+- **2.4 People management** — list with outstanding balance per person, add modal, tap to view transaction history
+- **2.5 Debt tracker** — two tabs (I Owe / They Owe), settle button creates balancing transaction, net balance total at top
+- **2.6 Bill splits** — title, total, members (from people list or new), equal or custom split, saves as debt entries, split history with status
+- **2.7 Finance service** (`services/finance_service.py`) — `get_monthly_total`, `get_category_breakdown`, `get_net_debt`, `get_recent_transactions`; all TTL-cached 60s
+
+### Phase 3 — Investments & Goals
+
+- **3.1 Investments screen** — summary bar (total invested, current value, P&L %), card list with type badge and colored delta, filter chips by type
+- **3.2 Add/Edit investment modal** — name, type dropdown, amount invested, current value, date, notes; P&L auto-calculated
+- **3.3 Goals screen** — 2-column grid, progress bar, `₹X of ₹Y`, deadline badge, color-coded cards, "Add funds" button per goal
+- **3.4 Add goal modal** — name, category, target amount, starting amount, deadline, color picker, emoji picker
+
+### Phase 4 — Dashboard (depends on Phase 2 + 3)
+
+- **4.1 Summary cards** — horizontal scroll: This Month's Spend, Net Debt, Portfolio Value, Goals Progress — each tappable to navigate to source screen
+- **4.2 Recent transactions** — last 5 using shared `TransactionCard`, "See all" link
+- **4.3 Category chart** — donut/arc chart drawn on `ft.Canvas` showing top 4 spend categories for current month
+- **4.4 Quick-add FAB** — speed dial with 3 actions: Add Expense, Add Income, Add Split
+
+### Phase 5 — Notes Module
+
+- **5.1 Notebooks grid** — 2-column grid, emoji + name + color + note count, long-press to rename/delete, FAB to create notebook
+- **5.2 Notes list** — vertical list with title, preview, last updated; FAB picks type (Text / Image / Doodle)
+- **5.3 Text note editor** — full-screen text field, auto-save (debounced 500ms), title field, basic toolbar (bold, italic, checklist), markdown preview toggle
+- **5.4 Image note** — `ft.FilePicker` for gallery, multi-image horizontal strip, images saved to local storage, paths in `note_images` table
+- **5.5 Doodle canvas** (`components/doodle_canvas.py`) — `GestureDetector` + `Canvas`, pan events draw `cv.Line` segments, toolbar with 8 colors + 3 brush sizes + eraser + clear; save as PNG via Pillow, reload as `ft.Image`
+
+### Phase 6 — AI Chatbot
+
+- **6.1 Gemini service** (`services/ai_service.py`) — `init_client(api_key)`, `build_finance_context()` pulls live DB data into system prompt (TTL-cached 5 min), `send_message(history, message)` with full conversation history
+- **6.2 API key config** — one-time setup dialog on first open, stored in `config.json` (never hardcoded or committed)
+- **6.3 Chat screen** (`screens/chatbot.py`) — user bubbles right, AI bubbles left, typing indicator, keyboard-aware scroll, "Finance Summary" quick-prompt chip, last 50 messages persisted in DB
+
+### Phase 7 — Polish & Build
+
+- **7.1 Theme** — `ft.Theme` with seed color, custom font via `pyproject.toml` assets, `components/theme.py` constants
+- **7.2 Navigation** — slide transitions, Android back button handling (pop or exit dialog), debt count badge on Finance tab
+- **7.3 APK build** — add app icon, configure `pyproject.toml` (`bundle_id`, `version`), run `flet build apk`
+- **7.4 Device testing** — CRUD persistence after kill, doodle save/reload, Gemini on mobile data, back button behavior, APK size check
 
 ## Constraints
 
@@ -99,3 +146,22 @@ When implementing, always check which phase the task belongs to and mark progres
 - [ ] Is this a file path? → confirm it's within the app data directory
 - [ ] Is this a SQL query? → confirm it uses `?` placeholders
 - [ ] Is this a secret/key? → confirm it's read from `config.json`, not hardcoded
+
+## Committing and Pushing Code
+
+**Whenever the user asks to commit, push, or version any changes**, delegate entirely to the **GitHub Agent** subagent. Do NOT run `git` commands yourself.
+
+### How to hand off to the GitHub Agent
+
+Invoke it as a subagent and pass:
+- A summary of what was changed and why
+- Which phase/feature the work belongs to
+- Any files that should NOT be committed (e.g., `config.json` with real keys)
+
+### Example triggers that should invoke GitHub Agent
+
+- "commit this", "push the changes", "commit and push"
+- "save to GitHub", "create a PR", "open a pull request"
+- "make a commit for the work we just did"
+
+The GitHub Agent will handle staging, writing the commit message (Conventional Commits format), confirming with the user before pushing, and optionally creating a branch or PR.
