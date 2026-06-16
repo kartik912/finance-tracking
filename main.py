@@ -5,7 +5,7 @@ Responsibilities
 1. Initialise the database and cache service.
 2. Apply the global Material Design 3 theme.
 3. Render the 5-tab ``NavigationBar``.
-4. Route between screens via ``page.go(route)``.
+4. Route between screens via ``page.push_route(route)``.
 
 Run locally::
 
@@ -43,6 +43,11 @@ ROUTES: dict[str, str] = {
 # Tab index → route (matches NavigationBar destination order)
 TAB_ROUTES = ["/", "/finance", "/investments", "/goals", "/notes"]
 
+# Module-level reference to the NavigationBar, set in main() and read by
+# _route_change(). Required because page.navigation_bar reads from views[0]
+# in Flet 0.85.x, which raises if the views list has been cleared.
+_nav_bar: ft.NavigationBar | None = None
+
 
 # ---------------------------------------------------------------------------
 # Theme
@@ -71,8 +76,8 @@ def _build_dark_theme() -> ft.Theme:
 def _build_nav_bar(page: ft.Page) -> ft.NavigationBar:
     """Build the 5-tab bottom NavigationBar."""
 
-    def on_change(e: ft.ControlEvent) -> None:
-        page.go(TAB_ROUTES[int(e.data)])
+    async def on_change(e: ft.ControlEvent) -> None:
+        await page.push_route(TAB_ROUTES[int(e.data)])
 
     return ft.NavigationBar(
         selected_index=0,
@@ -112,17 +117,18 @@ def _build_nav_bar(page: ft.Page) -> ft.NavigationBar:
 # ---------------------------------------------------------------------------
 
 def _route_change(e: ft.RouteChangeEvent) -> None:
-    """Called by Flet whenever ``page.go(route)`` is invoked."""
+    """Called by Flet whenever ``page.push_route(route)`` is invoked."""
     page: ft.Page = e.page
     route: str = e.route
 
-    # Keep NavigationBar in sync with the current route
-    if route in TAB_ROUTES:
-        page.navigation_bar.selected_index = TAB_ROUTES.index(route)
+    # Sync the NavigationBar selection using the stored reference.
+    # Do NOT access page.navigation_bar here — in Flet 0.85.x it reads from
+    # views[0] and raises RuntimeError if the views list has been cleared.
+    if route in TAB_ROUTES and _nav_bar is not None:
+        _nav_bar.selected_index = TAB_ROUTES.index(route)
 
     # Lazy-import the screen module and call its build() function
     module_path = ROUTES.get(route)
-    page.views.clear()
 
     if module_path:
         import importlib
@@ -138,36 +144,37 @@ def _route_change(e: ft.RouteChangeEvent) -> None:
             ],
         )
 
-    view.navigation_bar = page.navigation_bar
+    view.navigation_bar = _nav_bar  # use stored ref, not page.navigation_bar
+    page.views.clear()
     page.views.append(view)
     page.update()
 
 
-def _view_pop(e: ft.ViewPopEvent) -> None:
+async def _view_pop(e: ft.ViewPopEvent) -> None:
     """Handle Android back button — pop view or show exit dialog."""
     page: ft.Page = e.page
     if len(page.views) > 1:
         page.views.pop()
         top = page.views[-1]
-        page.go(top.route)
+        await page.push_route(top.route)
     else:
-        page.go("/")
+        await page.push_route("/")
 
 
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
-def main(page: ft.Page) -> None:
+async def main(page: ft.Page) -> None:
     """Flet app entry point."""
     # ---- Load config -------------------------------------------------------
     cfg = load_config()
 
     # ---- Initialise database -----------------------------------------------
-    db_path = os.path.join(
-        page.app_data_dir if page.app_data_dir else "database",
-        "finance.db",
-    )
+    # page.app_data_dir is available on Android/iOS at runtime.
+    # On desktop (dev mode) it is not set, so fall back to the local database/ folder.
+    app_data = getattr(page, "app_data_dir", None)
+    db_path = os.path.join(app_data if app_data else "database", "finance.db")
     init_db(db_path)
     create_tables()
 
@@ -187,15 +194,19 @@ def main(page: ft.Page) -> None:
     page.padding = 0
 
     # ---- Navigation bar ----------------------------------------------------
-    page.navigation_bar = _build_nav_bar(page)
+    # Store in module-level var so _route_change can reference it without
+    # reading from page.navigation_bar (which requires a non-empty views list).
+    global _nav_bar
+    _nav_bar = _build_nav_bar(page)
+    page.navigation_bar = _nav_bar
 
     # ---- Routing -----------------------------------------------------------
     page.on_route_change = _route_change
     page.on_view_pop = _view_pop
 
     # ---- Navigate to default route -----------------------------------------
-    page.go(page.route or "/")
+    await page.push_route(page.route or "/")
 
 
 if __name__ == "__main__":
-    ft.app(target=main)
+    ft.run(main)
