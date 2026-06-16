@@ -18,20 +18,73 @@ You are the dedicated development agent for the **Finance Tracking App** — a p
 
 ## Folder Conventions
 
+Architecture follows a **layered, SOLID-compliant** structure. Each layer has one responsibility and depends only on layers below it.
+
 ```
 finance_tracking_app/
-├── main.py              ← App entry, ft.Theme, NavigationBar, page.go() routing
-├── db/
-│   ├── database.py      ← get_connection(), create_tables(), run_migration()
-│   └── models.py        ← @dataclass per table, from_row(), to_dict()
-├── screens/             ← One file per screen, each exports a build(page) function
-├── components/          ← Reusable widgets (cards, bottom_nav, doodle_canvas)
-├── services/
-│   ├── db_service.py    ← insert/get_all/get_by_id/update/delete only — no raw SQL in screens
-│   ├── cache_service.py ← LRUCache (128 entries) + TTLCache (60s); invalidate on writes
-│   ├── finance_service.py ← Aggregations (TTL-cached 60s)
-│   └── ai_service.py    ← Gemini wrapper; build_finance_context() TTL-cached 5 min
-└── assets/              ← Icons, fonts
+├── main.py                    ← App entry, ft.Theme, NavigationBar, page.go() routing
+│
+├── config/                    ← Configuration layer
+│   ├── __init__.py
+│   ├── database.py            ← SQLAlchemy engine, SessionLocal, Base, init_db(), create_tables(), run_migration()
+│   └── settings.py            ← AppConfig dataclass; loads/saves config.json at runtime
+│
+├── models/                    ← ORM model layer — one SQLAlchemy model per table
+│   ├── __init__.py
+│   ├── category.py            ← Category(Base) — subclasses config.database.Base
+│   ├── transaction.py         ← Transaction(Base)
+│   ├── person.py              ← Person(Base)
+│   ├── debt.py                ← Debt(Base)
+│   ├── split.py               ← Split(Base)
+│   ├── investment.py          ← Investment(Base)
+│   ├── goal.py                ← Goal(Base)
+│   ├── notebook.py            ← Notebook(Base)
+│   ├── note.py                ← Note(Base)
+│   ├── note_image.py          ← NoteImage(Base)
+│   ├── note_doodle.py         ← NoteDoodle(Base)
+│   └── chat_message.py        ← ChatMessage(Base)
+│
+├── repositories/              ← Data-access layer — all raw SQL lives here
+│   ├── __init__.py
+│   ├── base_repository.py     ← Abstract Generic[T] with get_by_id, get_all, insert, update, delete
+│   ├── category_repository.py
+│   ├── transaction_repository.py
+│   ├── person_repository.py
+│   ├── debt_repository.py
+│   ├── split_repository.py
+│   ├── investment_repository.py
+│   ├── goal_repository.py
+│   ├── notebook_repository.py
+│   ├── note_repository.py
+│   └── chat_message_repository.py
+│
+├── observers/                 ← Observer / event-bus layer
+│   ├── __init__.py
+│   └── event_bus.py           ← Simple pub/sub; repositories publish events, cache subscribes
+│
+├── services/                  ← Business-logic layer — no raw SQL, depends on repositories
+│   ├── __init__.py
+│   ├── cache_service.py       ← LRUCache (128) + TTLCache (60s); subscribes to EventBus
+│   ├── finance_service.py     ← get_monthly_total, get_category_breakdown (TTL-cached 60s)
+│   └── ai_service.py          ← Gemini wrapper; build_finance_context() TTL-cached 5 min
+│
+├── screens/                   ← One file per screen, exports build(page) → ft.View
+├── components/                ← Reusable Flet widgets (cards, bottom_nav, doodle_canvas)
+└── assets/                    ← Icons, fonts
+```
+
+### Layer Dependency Rules (enforced — never break these)
+
+```
+screens / components
+      ↓ calls
+   services
+      ↓ calls
+  repositories  ← use SessionLocal from config.database; return ORM model instances
+      ↓
+   models  (subclass Base from config.database — no SQL, no logic)
+   config  (database.py + settings.py — shared by all layers)
+   observers  (event_bus.py — used by repositories and cache_service only)
 ```
 
 ## Command / Script Execution
@@ -54,11 +107,11 @@ finance_tracking_app/
 | Table | Key Fields |
 |---|---|
 | `categories` | id, name, icon, color, is_default |
-| `transactions` | id, date, amount, category_id, description, type, person_id |
+| `transactions` | id, date, amount, category_id, description, **type** (mapped as `transaction_type`), person_id |
 | `people` | id, name, notes |
 | `debts` | id, person_id, amount, direction, description, settled |
 | `splits` | id, description, total_amount, date, members_json, my_share |
-| `investments` | id, name, type, amount_invested, current_value, date |
+| `investments` | id, name, **type** (mapped as `investment_type`), amount_invested, current_value, date |
 | `goals` | id, name, category, target_amount, current_amount, deadline, color |
 | `notebooks` | id, name, color, emoji, created_at |
 | `notes` | id, notebook_id, title, content_text, note_type, created_at |
@@ -66,16 +119,58 @@ finance_tracking_app/
 | `note_doodles` | id, note_id, doodle_path |
 | `chat_messages` | id, role, content, timestamp |
 
+> **Note:** `type` columns in `transactions` and `investments` are mapped to Python attributes
+> `transaction_type` and `investment_type` respectively to avoid collision with SQLAlchemy's
+> internal polymorphic discriminator attribute.
+
 ## Coding Rules
 
-1. **No raw SQL outside `db_service.py`** — all screens call service functions only
-2. **Every write operation invalidates the relevant cache key** via `cache_service.invalidate(key)`
-3. **Parameterized queries only** — use `?` placeholders, never f-strings or concatenation in SQL
-4. **Input validation at the service layer** — sanitize amounts (numeric), text (max length), file paths (restrict to app data dir) before any DB write
-5. **No secrets in code** — API keys read from `config.json` at runtime
-6. **No raw SQL in screens** — all DB access goes through `db_service` or a service function
-7. **File paths in notes/doodles** — always use the app's private data directory, never absolute paths that break on reinstall
-8. **`cachetools` thread safety** — wrap cache access with `threading.Lock` where multiple threads may write
+1. **No raw SQL outside `repositories/`** — screens and services never write SQL directly; use SQLAlchemy ORM queries
+2. **Every write operation publishes an event** via `EventBus` so `CacheService` auto-invalidates
+3. **Use ORM queries or `text()` with bound params** — never f-strings or string concatenation in SQL
+4. **Input validation at the service layer** — validate amounts (numeric, positive), text (max 500 chars), file paths (must be within app data dir) before calling any repository method
+5. **No secrets in code** — API keys loaded from `config.json` at runtime via `AppConfig`
+6. **Models are ORM classes only** — subclass `Base` from `config.database`; no business logic; each has a `to_dict()` method
+7. **Session lifecycle** — repositories obtain `SessionLocal()`, commit/rollback, then call `SessionLocal.remove()` in a `finally` block
+8. **File paths in notes/doodles** — always store relative paths from the app data dir; reconstruct absolute path at read time
+9. **`cachetools` thread safety** — all cache reads/writes are wrapped in `threading.Lock` inside `CacheService`
+10. **One class per file** in `models/` and `repositories/` — never combine multiple entities in one file
+
+## SOLID Principles
+
+### S — Single Responsibility
+- Each model file owns exactly one table's schema mapping
+- Each repository handles CRUD for exactly one entity
+- Services contain business logic only — never SQL
+
+### O — Open / Closed
+- `BaseRepository` is closed for modification; extend it to add entity-specific queries
+- Add new query methods to the concrete repository without touching base
+
+### L — Liskov Substitution
+- Every concrete repository (`CategoryRepository`, etc.) fully satisfies the `BaseRepository[T]` contract
+- Services that accept a `BaseRepository[T]` can work with any concrete subclass
+
+### I — Interface Segregation
+- `BaseRepository` exposes only generic CRUD; entity-specific queries live only in the concrete class
+- Screens import only the service they need — never the full repository
+
+### D — Dependency Inversion
+- Services receive repository instances via constructor injection, not direct imports
+- `EventBus` is a singleton accessed through `observers.event_bus.get_bus()` — never instantiated ad-hoc
+
+## Linting & Code Style
+
+- **Type hints required** on every function and method signature — use `from __future__ import annotations`
+- **Return types** must be explicit: `def get_all(...) -> list[Category]:`, never `-> list`
+- **Docstrings** on every public class and public method (one-liner is fine for simple methods)
+- **Max line length: 100 characters** — break long chains across lines
+- **No bare `except:`** — always catch specific exception types (`except sqlite3.Error as exc:`)
+- **No mutable default arguments** — use `None` and assign inside the function body
+- **`dataclasses.field(default_factory=...)` ** for mutable defaults in dataclasses
+- **Import order** (enforced): stdlib → third-party → local; separated by blank lines
+- **No wildcard imports** — `from module import *` is forbidden
+- **`Optional[X]`** → use `X | None` (Python 3.10+ union syntax)
 
 ## Implementation Phase Tracker
 
@@ -84,11 +179,13 @@ Always identify which phase and sub-task applies before writing any code. Phases
 ### Phase 1 — Project Scaffold & Database ← START HERE
 
 - **1.1 Environment setup** — `pip install flet google-generativeai pillow cachetools`, create full folder structure, `requirements.txt`, `pyproject.toml`
-- **1.2 Database init** (`db/database.py`) — `get_connection()` singleton with `row_factory`, WAL mode (`PRAGMA journal_mode=WAL`), `create_tables()` for all 12 tables, `run_migration(version)` for schema changes
-- **1.3 Data models** (`db/models.py`) — one `@dataclass` per table with `from_row()` and `to_dict()`
-- **1.4 CRUD service** (`services/db_service.py`) — `insert`, `get_all`, `get_by_id`, `update`, `delete` — no raw SQL in screens; writes auto-invalidate cache
-- **1.5 Cache service** (`services/cache_service.py`) — `LRUCache` (max 128) for list queries; `TTLCache` (60s) for aggregates; `invalidate(key)` called on every write
-- **1.6 App shell** (`main.py`) — global theme, 5-tab `NavigationBar`, `on_navigation_change`, routing via `page.go(route)`
+- **1.2 Database base** (`config/database.py`) ✅ — SQLAlchemy `engine`, `SessionLocal` (scoped), `Base`; `init_db(path)`, `create_tables()`, `run_migration(version)`; WAL mode + foreign keys set via `event.listens_for`
+- **1.3 ORM models** (`models/<entity>.py`) ✅ — one `class Entity(Base)` per file; `Column` definitions matching DB schema; each has `to_dict() -> dict[str, Any]`
+- **1.4 Config layer** (`config/settings.py`) — `AppConfig` dataclass; `load() -> AppConfig` reads `config.json`; `save(config)` writes it; never hardcode keys
+- **1.5 Observer / event bus** (`observers/event_bus.py`) — lightweight pub/sub; `EventBus.subscribe(event, handler)`, `EventBus.publish(event, data)`; used by repositories to signal writes
+- **1.6 Repository layer** (`repositories/`) — `BaseRepository[T]` abstract class with `get_by_id`, `get_all`, `insert`, `update`, `delete`; one concrete subclass per entity; each write calls `EventBus.publish`
+- **1.7 Cache service** (`services/cache_service.py`) — `LRUCache` (max 128) for list queries; `TTLCache` (60s) for aggregates; subscribes to `EventBus` to auto-invalidate on writes
+- **1.8 App shell** (`main.py`) — global theme, 5-tab `NavigationBar`, `on_navigation_change`, routing via `page.go(route)`
 
 ### Phase 2 — Finance Tracker
 
@@ -98,7 +195,7 @@ Always identify which phase and sub-task applies before writing any code. Phases
 - **2.4 People management** — list with outstanding balance per person, add modal, tap to view transaction history
 - **2.5 Debt tracker** — two tabs (I Owe / They Owe), settle button creates balancing transaction, net balance total at top
 - **2.6 Bill splits** — title, total, members (from people list or new), equal or custom split, saves as debt entries, split history with status
-- **2.7 Finance service** (`services/finance_service.py`) — `get_monthly_total`, `get_category_breakdown`, `get_net_debt`, `get_recent_transactions`; all TTL-cached 60s
+- **2.7 Finance service** (`services/finance_service.py`) — `get_monthly_total`, `get_category_breakdown`, `get_net_debt`, `get_recent_transactions`; all TTL-cached 60s; calls repositories, never raw SQL
 
 ### Phase 3 — Investments & Goals
 
