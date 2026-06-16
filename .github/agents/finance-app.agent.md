@@ -182,10 +182,10 @@ Always identify which phase and sub-task applies before writing any code. Phases
 - **1.2 Database base** (`config/database.py`) ✅ — SQLAlchemy `engine`, `SessionLocal` (scoped), `Base`; `init_db(path)`, `create_tables()`, `run_migration(version)`; WAL mode + foreign keys set via `event.listens_for`
 - **1.3 ORM models** (`models/<entity>.py`) ✅ — one `class Entity(Base)` per file; `Column` definitions matching DB schema; each has `to_dict() -> dict[str, Any]`
 - **1.4 Config layer** (`config/settings.py`) ✅ — `AppConfig` dataclass; `load() -> AppConfig` reads `config.json`; `save(config)` writes it; never hardcode keys
-- **1.5 Observer / event bus** (`observers/event_bus.py`) — lightweight pub/sub; `EventBus.subscribe(event, handler)`, `EventBus.publish(event, data)`; used by repositories to signal writes
+- **1.5 Observer / event bus** (`observers/event_bus.py`) ✅ — lightweight pub/sub; `EventBus.subscribe(event, handler)`, `EventBus.publish(event, data)`; used by repositories to signal writes
 - **1.6 Repository layer** (`repositories/`) — `BaseRepository[T]` abstract class with `get_by_id`, `get_all`, `insert`, `update`, `delete`; one concrete subclass per entity; each write calls `EventBus.publish`
-- **1.7 Cache service** (`services/cache_service.py`) — `LRUCache` (max 128) for list queries; `TTLCache` (60s) for aggregates; subscribes to `EventBus` to auto-invalidate on writes
-- **1.8 App shell** (`main.py`) — global theme, 5-tab `NavigationBar`, `on_navigation_change`, routing via `page.go(route)`
+- **1.7 Cache service** (`services/cache_service.py`) ✅ — `LRUCache` (max 128) for list queries; `TTLCache` (60s) for aggregates; subscribes to `EventBus` to auto-invalidate on writes
+- **1.8 App shell** (`main.py`) ✅ — global theme, 5-tab `NavigationBar`, `on_navigation_change`, routing via `page.go(route)`
 
 ### Phase 2 — Finance Tracker
 

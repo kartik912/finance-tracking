@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from config.database import get_session
 from models.note import Note
+from observers.event_bus import Events, get_bus
 from repositories.base_repository import BaseRepository
 
 
@@ -32,6 +33,7 @@ class NoteRepository(BaseRepository[Note]):
             session.add(entity)
             session.commit()
             session.refresh(entity)
+            get_bus().publish(Events.NOTE_WRITE, {"id": entity.id})
             return entity
         except Exception:
             session.rollback()
@@ -46,6 +48,7 @@ class NoteRepository(BaseRepository[Note]):
             merged = session.merge(entity)
             session.commit()
             session.refresh(merged)
+            get_bus().publish(Events.NOTE_WRITE, {"id": merged.id})
             return merged
         except Exception:
             session.rollback()
@@ -62,6 +65,7 @@ class NoteRepository(BaseRepository[Note]):
                 return False
             session.delete(obj)
             session.commit()
+            get_bus().publish(Events.NOTE_WRITE, {"id": entity_id})
             return True
         except Exception:
             session.rollback()

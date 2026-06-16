@@ -1,0 +1,201 @@
+"""App entry point.
+
+Responsibilities
+----------------
+1. Initialise the database and cache service.
+2. Apply the global Material Design 3 theme.
+3. Render the 5-tab ``NavigationBar``.
+4. Route between screens via ``page.go(route)``.
+
+Run locally::
+
+    flet run main.py
+
+Build APK::
+
+    flet build apk
+"""
+from __future__ import annotations
+
+import os
+
+import flet as ft
+
+from config.database import create_tables, init_db
+from config.settings import load as load_config
+from services.cache_service import CacheService
+
+
+# ---------------------------------------------------------------------------
+# Route → screen builder mapping
+# ---------------------------------------------------------------------------
+# Each screen module must expose a ``build(page) -> ft.View`` function.
+# Screens are imported lazily inside the route handler to keep startup fast.
+
+ROUTES: dict[str, str] = {
+    "/":             "screens.dashboard",
+    "/finance":      "screens.finance_tracker",
+    "/investments":  "screens.investments",
+    "/goals":        "screens.goals",
+    "/notes":        "screens.notebooks",
+}
+
+# Tab index → route (matches NavigationBar destination order)
+TAB_ROUTES = ["/", "/finance", "/investments", "/goals", "/notes"]
+
+
+# ---------------------------------------------------------------------------
+# Theme
+# ---------------------------------------------------------------------------
+
+def _build_theme() -> ft.Theme:
+    """Return the global Material Design 3 light theme."""
+    return ft.Theme(
+        color_scheme_seed=ft.Colors.INDIGO,
+        use_material3=True,
+    )
+
+
+def _build_dark_theme() -> ft.Theme:
+    """Return the global Material Design 3 dark theme."""
+    return ft.Theme(
+        color_scheme_seed=ft.Colors.INDIGO,
+        use_material3=True,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Navigation bar
+# ---------------------------------------------------------------------------
+
+def _build_nav_bar(page: ft.Page) -> ft.NavigationBar:
+    """Build the 5-tab bottom NavigationBar."""
+
+    def on_change(e: ft.ControlEvent) -> None:
+        page.go(TAB_ROUTES[int(e.data)])
+
+    return ft.NavigationBar(
+        selected_index=0,
+        on_change=on_change,
+        destinations=[
+            ft.NavigationBarDestination(
+                icon=ft.Icons.DASHBOARD_OUTLINED,
+                selected_icon=ft.Icons.DASHBOARD,
+                label="Dashboard",
+            ),
+            ft.NavigationBarDestination(
+                icon=ft.Icons.ACCOUNT_BALANCE_WALLET_OUTLINED,
+                selected_icon=ft.Icons.ACCOUNT_BALANCE_WALLET,
+                label="Finance",
+            ),
+            ft.NavigationBarDestination(
+                icon=ft.Icons.TRENDING_UP_OUTLINED,
+                selected_icon=ft.Icons.TRENDING_UP,
+                label="Investments",
+            ),
+            ft.NavigationBarDestination(
+                icon=ft.Icons.FLAG_OUTLINED,
+                selected_icon=ft.Icons.FLAG,
+                label="Goals",
+            ),
+            ft.NavigationBarDestination(
+                icon=ft.Icons.BOOK_OUTLINED,
+                selected_icon=ft.Icons.BOOK,
+                label="Notes",
+            ),
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Route handler
+# ---------------------------------------------------------------------------
+
+def _route_change(e: ft.RouteChangeEvent) -> None:
+    """Called by Flet whenever ``page.go(route)`` is invoked."""
+    page: ft.Page = e.page
+    route: str = e.route
+
+    # Keep NavigationBar in sync with the current route
+    if route in TAB_ROUTES:
+        page.navigation_bar.selected_index = TAB_ROUTES.index(route)
+
+    # Lazy-import the screen module and call its build() function
+    module_path = ROUTES.get(route)
+    page.views.clear()
+
+    if module_path:
+        import importlib
+        module = importlib.import_module(module_path)
+        view: ft.View = module.build(page)
+    else:
+        # 404 fallback
+        view = ft.View(
+            route=route,
+            controls=[
+                ft.AppBar(title=ft.Text("Not Found")),
+                ft.Text(f"No screen registered for route: {route}"),
+            ],
+        )
+
+    view.navigation_bar = page.navigation_bar
+    page.views.append(view)
+    page.update()
+
+
+def _view_pop(e: ft.ViewPopEvent) -> None:
+    """Handle Android back button — pop view or show exit dialog."""
+    page: ft.Page = e.page
+    if len(page.views) > 1:
+        page.views.pop()
+        top = page.views[-1]
+        page.go(top.route)
+    else:
+        page.go("/")
+
+
+# ---------------------------------------------------------------------------
+# Main entry point
+# ---------------------------------------------------------------------------
+
+def main(page: ft.Page) -> None:
+    """Flet app entry point."""
+    # ---- Load config -------------------------------------------------------
+    cfg = load_config()
+
+    # ---- Initialise database -----------------------------------------------
+    db_path = os.path.join(
+        page.app_data_dir if page.app_data_dir else "database",
+        "finance.db",
+    )
+    init_db(db_path)
+    create_tables()
+
+    # ---- Initialise cache service ------------------------------------------
+    cache = CacheService.instance()
+    cache.register_invalidators()
+
+    # ---- Page settings -----------------------------------------------------
+    page.title = "Finance Tracker"
+    page.theme = _build_theme()
+    page.dark_theme = _build_dark_theme()
+    page.theme_mode = (
+        ft.ThemeMode.DARK   if cfg.theme_mode == "dark"
+        else ft.ThemeMode.LIGHT if cfg.theme_mode == "light"
+        else ft.ThemeMode.SYSTEM
+    )
+    page.padding = 0
+
+    # ---- Navigation bar ----------------------------------------------------
+    page.navigation_bar = _build_nav_bar(page)
+
+    # ---- Routing -----------------------------------------------------------
+    page.on_route_change = _route_change
+    page.on_view_pop = _view_pop
+
+    # ---- Navigate to default route -----------------------------------------
+    page.go(page.route or "/")
+
+
+if __name__ == "__main__":
+    ft.app(target=main)
