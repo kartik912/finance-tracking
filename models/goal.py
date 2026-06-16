@@ -32,3 +32,6 @@ class Goal(Base):
             "deadline": self.deadline,
             "color": self.color,
         }
+
+    def __repr__(self) -> str:
+        return f"<Goal id={self.id} name={self.name!r} target={self.target_amount}>"

@@ -1,74 +1,17 @@
 """Repository for the note_images table."""
 from __future__ import annotations
 
-from config.database import get_session
 from models.note_image import NoteImage
-from observers.event_bus import Events, get_bus
+from observers.event_bus import Events
 from repositories.base_repository import BaseRepository
 
 
 class NoteImageRepository(BaseRepository[NoteImage]):
-    """CRUD operations for :class:`~models.note_image.NoteImage`."""
+    """CRUD operations for :class:`~models.note_image.NoteImage`.
 
-    def get_by_id(self, entity_id: int) -> NoteImage | None:
-        """Return a NoteImage by primary key, or ``None`` if not found."""
-        session = get_session()
-        try:
-            return session.get(NoteImage, entity_id)
-        finally:
-            session.remove()
+    Add image-specific query methods here (e.g. get_by_note).
+    Standard CRUD is inherited from :class:`~repositories.base_repository.BaseRepository`.
+    """
 
-    def get_all(self) -> list[NoteImage]:
-        """Return all note images ordered by id."""
-        session = get_session()
-        try:
-            return session.query(NoteImage).order_by(NoteImage.id).all()
-        finally:
-            session.remove()
-
-    def insert(self, entity: NoteImage) -> NoteImage:
-        """Persist a new note image and return it with its assigned id."""
-        session = get_session()
-        try:
-            session.add(entity)
-            session.commit()
-            session.refresh(entity)
-            get_bus().publish(Events.NOTE_IMAGE_WRITE, {"id": entity.id})
-            return entity
-        except Exception:
-            session.rollback()
-            raise
-        finally:
-            session.remove()
-
-    def update(self, entity: NoteImage) -> NoteImage:
-        """Merge changes to an existing note image and return the updated instance."""
-        session = get_session()
-        try:
-            merged = session.merge(entity)
-            session.commit()
-            session.refresh(merged)
-            get_bus().publish(Events.NOTE_IMAGE_WRITE, {"id": merged.id})
-            return merged
-        except Exception:
-            session.rollback()
-            raise
-        finally:
-            session.remove()
-
-    def delete(self, entity_id: int) -> bool:
-        """Delete a note image by id. Returns ``True`` if deleted, ``False`` if not found."""
-        session = get_session()
-        try:
-            obj = session.get(NoteImage, entity_id)
-            if obj is None:
-                return False
-            session.delete(obj)
-            session.commit()
-            get_bus().publish(Events.NOTE_IMAGE_WRITE, {"id": entity_id})
-            return True
-        except Exception:
-            session.rollback()
-            raise
-        finally:
-            session.remove()
+    def __init__(self) -> None:
+        super().__init__(NoteImage, Events.NOTE_IMAGE_WRITE)

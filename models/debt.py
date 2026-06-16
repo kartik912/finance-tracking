@@ -33,3 +33,6 @@ class Debt(Base):
             "description": self.description,
             "settled": self.settled,
         }
+
+    def __repr__(self) -> str:
+        return f"<Debt id={self.id} direction={self.direction!r} amount={self.amount}>"

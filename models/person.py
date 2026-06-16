@@ -24,3 +24,6 @@ class Person(Base):
             "name": self.name,
             "notes": self.notes,
         }
+
+    def __repr__(self) -> str:
+        return f"<Person id={self.id} name={self.name!r}>"

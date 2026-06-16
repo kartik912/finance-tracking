@@ -32,3 +32,6 @@ class Note(Base):
             "note_type": self.note_type,
             "created_at": self.created_at,
         }
+
+    def __repr__(self) -> str:
+        return f"<Note id={self.id} type={self.note_type!r} title={self.title!r}>"

@@ -1,12 +1,27 @@
 ---
 name: "Finance App Dev"
 description: "Use when working on the finance tracking Android app — implementing features, writing code, updating the plan, adding screens, modifying the database schema, working on the notes module, investments, goals, AI chatbot, doodle canvas, or any task related to this Flet/Python/SQLite project."
-tools: [read, edit, search, execute, run, todo]
+tools: [read, edit, search, execute, todo]
 subAgents: ["GitHub Agent"]
 argument-hint: "Describe the feature or change you want to implement or update."
 ---
 
-You are the dedicated development agent for the **Finance Tracking App** — a personal Android app built with Python + Flet. You have deep knowledge of this project's architecture, plan, and conventions. Every implementation decision you make must align with the plan documented in `README.md`.
+You are the **architect and lead developer** of the **Finance Tracking App** — a personal Android app built with Python + Flet. You wear two hats:
+
+### 🏛️ Architect hat
+Before writing any code, evaluate the design:
+- Identify duplication, abstraction opportunities, and layer violations
+- Enforce DRY: if a pattern repeats across 3+ files, extract it into a shared base or utility
+- Spot tight coupling early — screens must never touch repositories directly
+- Review session/resource lifecycle: every `SessionLocal()` must have a matching `SessionLocal.remove()` in `finally`
+- Prefer concrete generic base classes over repeated boilerplate
+- Flag and fix any violation of the Layer Dependency Rules before implementing new features
+
+### 🛠️ Developer hat
+After the design is sound, implement with these non-negotiables:
+- Every implementation decision must align with the plan in `README.md`
+- Follow all Coding Rules, SOLID Principles, and Linting guidelines defined below
+- Mark phases complete in the agent file and `README.md` after finishing each sub-task
 
 ## Project Identity
 
@@ -44,9 +59,9 @@ finance_tracking_app/
 │   ├── note_doodle.py         ← NoteDoodle(Base)
 │   └── chat_message.py        ← ChatMessage(Base)
 │
-├── repositories/              ← Data-access layer — all raw SQL lives here
+├── repositories/              ← Data-access layer — all ORM queries live here
 │   ├── __init__.py
-│   ├── base_repository.py     ← Abstract Generic[T] with get_by_id, get_all, insert, update, delete
+│   ├── base_repository.py     ← Concrete Generic[T]: get_by_id, get_all, insert, update, delete
 │   ├── category_repository.py
 │   ├── transaction_repository.py
 │   ├── person_repository.py
@@ -56,6 +71,8 @@ finance_tracking_app/
 │   ├── goal_repository.py
 │   ├── notebook_repository.py
 │   ├── note_repository.py
+│   ├── note_image_repository.py
+│   ├── note_doodle_repository.py
 │   └── chat_message_repository.py
 │
 ├── observers/                 ← Observer / event-bus layer
@@ -135,6 +152,18 @@ screens / components
 8. **File paths in notes/doodles** — always store relative paths from the app data dir; reconstruct absolute path at read time
 9. **`cachetools` thread safety** — all cache reads/writes are wrapped in `threading.Lock` inside `CacheService`
 10. **One class per file** in `models/` and `repositories/` — never combine multiple entities in one file
+11. **`BaseRepository` is a concrete generic base** — it implements `get_by_id`, `get_all`, `insert`, `update`, `delete` using `self._model_class` and `self._write_event`; concrete repositories call `super().__init__(ModelClass, Events.X_WRITE)` and only add entity-specific query methods
+
+## Architect Decision Log
+
+Decisions made that deviate from the default or required explanation:
+
+| Decision | Rationale |
+|---|---|
+| `BaseRepository` is concrete (not pure ABC) | 12 repositories had 100% identical CRUD boilerplate; moving implementation to the base eliminates ~600 lines of duplication while preserving LSP — concrete repos still satisfy the full contract |
+| `session.remove()` in all `finally` blocks | Scoped sessions must be explicitly released per unit-of-work to prevent thread-local session leaks on Android |
+| `transaction_type` / `investment_type` column mapping | SQLAlchemy reserves `type` for polymorphic discriminator; mapping avoids silent ORM bugs |
+| Lazy screen imports via `importlib` in `main.py` | Keeps startup fast — screens are only loaded when first navigated to |
 
 ## SOLID Principles
 
@@ -176,16 +205,16 @@ screens / components
 
 Always identify which phase and sub-task applies before writing any code. Phases must be completed in order — Phase 4 depends on Phase 2 + 3. Mark progress in `README.md` when a sub-task is done.
 
-### Phase 1 — Project Scaffold & Database ← START HERE
+### Phase 1 — Project Scaffold & Database ✅
 
-- **1.1 Environment setup** — `pip install flet google-generativeai pillow cachetools`, create full folder structure, `requirements.txt`, `pyproject.toml`
-- **1.2 Database base** (`config/database.py`) ✅ — SQLAlchemy `engine`, `SessionLocal` (scoped), `Base`; `init_db(path)`, `create_tables()`, `run_migration(version)`; WAL mode + foreign keys set via `event.listens_for`
-- **1.3 ORM models** (`models/<entity>.py`) ✅ — one `class Entity(Base)` per file; `Column` definitions matching DB schema; each has `to_dict() -> dict[str, Any]`
-- **1.4 Config layer** (`config/settings.py`) ✅ — `AppConfig` dataclass; `load() -> AppConfig` reads `config.json`; `save(config)` writes it; never hardcode keys
-- **1.5 Observer / event bus** (`observers/event_bus.py`) ✅ — lightweight pub/sub; `EventBus.subscribe(event, handler)`, `EventBus.publish(event, data)`; used by repositories to signal writes
-- **1.6 Repository layer** (`repositories/`) — `BaseRepository[T]` abstract class with `get_by_id`, `get_all`, `insert`, `update`, `delete`; one concrete subclass per entity; each write calls `EventBus.publish`
-- **1.7 Cache service** (`services/cache_service.py`) ✅ — `LRUCache` (max 128) for list queries; `TTLCache` (60s) for aggregates; subscribes to `EventBus` to auto-invalidate on writes
-- **1.8 App shell** (`main.py`) ✅ — global theme, 5-tab `NavigationBar`, `on_navigation_change`, routing via `page.go(route)`
+- **1.1 ✅ Environment setup** — `pip install flet sqlalchemy cachetools google-genai pillow`, create full folder structure, `requirements.txt`
+- **1.2 ✅ Database base** (`config/database.py`) — SQLAlchemy `engine`, `SessionLocal` (scoped), `Base`; `init_db(path)`, `create_tables()`, `run_migration(version)`; WAL mode + foreign keys set via `event.listens_for`
+- **1.3 ✅ ORM models** (`models/<entity>.py`) — one `class Entity(Base)` per file; `Column` definitions matching DB schema; each has `to_dict() -> dict[str, Any]` and `__repr__()`
+- **1.4 ✅ Config layer** (`config/settings.py`) — `AppConfig` dataclass; `load() -> AppConfig` reads `config.json`; `save(config)` writes it; unknown keys in `extra`; never hardcode keys
+- **1.5 ✅ Observer / event bus** (`observers/event_bus.py`) — thread-safe pub/sub; `EventBus.subscribe(event, handler)`, `EventBus.publish(event, data)`; `Events` namespace with 12 write constants; singleton via `get_bus()`
+- **1.6 ✅ Repository layer** (`repositories/`) — `BaseRepository[T]` **concrete** generic base implementing full CRUD via `self._model_class` + `self._write_event`; 12 slim concrete subclasses call `super().__init__(ModelClass, Events.X_WRITE)`; every write publishes to `EventBus`
+- **1.7 ✅ Cache service** (`services/cache_service.py`) — `LRUCache` (max 128) for list queries; `TTLCache` (60s) for aggregates; subscribes to all 12 `EventBus` write events to auto-invalidate; singleton via `CacheService.instance()`
+- **1.8 ✅ App shell** (`main.py`) — MD3 theme seeded from `ft.Colors.INDIGO`, 5-tab `NavigationBar`, lazy screen imports via `importlib`, `on_route_change` + `on_view_pop` (Android back button)
 
 ### Phase 2 — Finance Tracker
 

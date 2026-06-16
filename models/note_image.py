@@ -28,3 +28,6 @@ class NoteImage(Base):
             "note_id": self.note_id,
             "image_path": self.image_path,
         }
+
+    def __repr__(self) -> str:
+        return f"<NoteImage id={self.id} note_id={self.note_id}>"

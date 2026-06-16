@@ -28,3 +28,6 @@ class Category(Base):
             "color": self.color,
             "is_default": self.is_default,
         }
+
+    def __repr__(self) -> str:
+        return f"<Category id={self.id} name={self.name!r}>"

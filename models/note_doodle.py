@@ -28,3 +28,6 @@ class NoteDoodle(Base):
             "note_id": self.note_id,
             "doodle_path": self.doodle_path,
         }
+
+    def __repr__(self) -> str:
+        return f"<NoteDoodle id={self.id} note_id={self.note_id}>"

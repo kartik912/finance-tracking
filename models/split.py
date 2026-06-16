@@ -31,3 +31,6 @@ class Split(Base):
             "members_json": self.members_json,
             "my_share": self.my_share,
         }
+
+    def __repr__(self) -> str:
+        return f"<Split id={self.id} total={self.total_amount}>"

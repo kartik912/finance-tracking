@@ -32,3 +32,6 @@ class Investment(Base):
             "current_value": self.current_value,
             "date": self.date,
         }
+
+    def __repr__(self) -> str:
+        return f"<Investment id={self.id} name={self.name!r} type={self.investment_type!r}>"

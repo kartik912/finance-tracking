@@ -28,3 +28,6 @@ class Notebook(Base):
             "emoji": self.emoji,
             "created_at": self.created_at,
         }
+
+    def __repr__(self) -> str:
+        return f"<Notebook id={self.id} name={self.name!r}>"

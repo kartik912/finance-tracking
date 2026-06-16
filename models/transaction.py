@@ -34,3 +34,6 @@ class Transaction(Base):
             "type": self.transaction_type,
             "person_id": self.person_id,
         }
+
+    def __repr__(self) -> str:
+        return f"<Transaction id={self.id} type={self.transaction_type!r} amount={self.amount}>"

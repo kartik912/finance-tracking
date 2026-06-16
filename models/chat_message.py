@@ -27,3 +27,6 @@ class ChatMessage(Base):
             "content": self.content,
             "timestamp": self.timestamp,
         }
+
+    def __repr__(self) -> str:
+        return f"<ChatMessage id={self.id} role={self.role!r}>"
