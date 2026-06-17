@@ -51,9 +51,13 @@ def fresh_db():
     # Reset service singletons so they bind to the new DB
     from services.cache_service import CacheService
     from services.finance_service import FinanceService
+    from services.investment_service import InvestmentService
+    from services.goal_service import GoalService
 
     CacheService._instance = None  # type: ignore[attr-defined]
     FinanceService._instance = None  # type: ignore[attr-defined]
+    InvestmentService._instance = None  # type: ignore[attr-defined]
+    GoalService._instance = None  # type: ignore[attr-defined]
 
     # Reset EventBus so subscriptions from previous tests don't accumulate
     from observers.event_bus import EventBus

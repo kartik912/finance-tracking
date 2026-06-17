@@ -85,8 +85,8 @@ finance_tracking_app/
 +-- screens/                         <- One file per screen, each exports build(page) -> ft.View
 |   +-- dashboard.py                 <- (Phase 4 placeholder)
 |   +-- finance_tracker.py           <- (Phase 2 placeholder)
-|   +-- investments.py               <- (Phase 3 placeholder)
-|   +-- goals.py                     <- (Phase 3 placeholder)
+|   +-- investments.py               <- Phase 3.1 + 3.2 (done)
+|   +-- goals.py                     <- Phase 3.3 + 3.4 (done)
 |   +-- notebooks.py                 <- (Phase 5 placeholder)
 |
 +-- components/                      <- Reusable Flet widgets (Phase 2+)
@@ -141,12 +141,12 @@ finance_tracking_app/
 - **2.6 DONE Bill splits** - title, total, members (typed inline), equal or custom split per member, split history list with total + my share
 - **2.7 Finance service** (services/finance_service.py) - get_monthly_total, get_category_breakdown, get_net_debt, get_recent_transactions; all TTL-cached (60s); calls repositories only, no raw SQL
 
-### Phase 3 - Investments & Goals
+### Phase 3 - Investments & Goals ✅
 
-- **3.1 Investments screen** - summary bar (total invested, current value, P&L %), card list with type badge and colored delta, filter chips by type
-- **3.2 Add/Edit investment modal** - name, type dropdown, amount invested, current value, date, notes; P&L auto-calculated
-- **3.3 Goals screen** - 2-column grid, progress bar, target amounts, deadline badge, color-coded cards, Add funds button per goal
-- **3.4 Add goal modal** - name, category, target amount, starting amount, deadline, color picker, emoji picker
+- **3.1 DONE Investments screen** - summary bar (total invested, current value, P&L %), card list with type badge and colored delta, filter chips by type (ft.Chip), swipe-to-delete
+- **3.2 DONE Add/Edit investment modal** - name, type dropdown, amount invested, current value, live P&L preview, date picker; all inputs validated in InvestmentService
+- **3.3 DONE Goals screen** - 2-column GridView, progress bar (ft.ProgressBar), ₹current of ₹target + %, deadline badge (overdue/due soon/date), color-coded cards, Add funds button per card
+- **3.4 DONE Add goal modal** - name, category, target amount, starting amount, deadline date picker, color picker (8 preset swatches); all inputs validated in GoalService
 
 ### Phase 4 - Dashboard (depends on Phase 2 + 3)
 
