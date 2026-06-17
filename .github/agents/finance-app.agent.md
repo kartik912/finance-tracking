@@ -218,13 +218,13 @@ Always identify which phase and sub-task applies before writing any code. Phases
 
 ### Phase 2 — Finance Tracker
 
-- **2.1 Transaction list** — month/year selector, scrollable list grouped by date, `TransactionCard` (category icon + amount), `ft.Dismissible` swipe-to-delete, FAB to add
-- **2.2 Add/Edit modal** — amount numpad, description, category chips, date picker, expense/income toggle, optional person link
-- **2.3 Category system** — user-created categories with name, icon (preset set), and color; stored in `categories` table; shown as horizontal chip row in forms; manage screen to add/edit/delete; default seed on first launch (Food, Transport, Bills, etc.)
+- **2.1 ✅ Transaction list** — month/year selector, scrollable list grouped by **category** (expandable/collapsible groups), `TransactionCard` (category icon + amount), `ft.Dismissible` swipe-to-delete, FAB to add; groups only appear when they contain transactions; newly saved transaction auto-expands its group
+- **2.2 ✅ Add/Edit modal** — amount field, description, category chips, date picker, expense/income toggle; categories come from seed data (no separate management screen)
+- ~~**2.3 Category system**~~ — **removed**: no separate category management screen; categories are seeded on first launch (Food, Transport, Bills, etc.) and shown as chips in the add/edit modal; transactions are grouped by category directly on the Finance screen
 - **2.4 People management** — list with outstanding balance per person, add modal, tap to view transaction history
 - **2.5 Debt tracker** — two tabs (I Owe / They Owe), settle button creates balancing transaction, net balance total at top
 - **2.6 Bill splits** — title, total, members (from people list or new), equal or custom split, saves as debt entries, split history with status
-- **2.7 Finance service** (`services/finance_service.py`) — `get_monthly_total`, `get_category_breakdown`, `get_net_debt`, `get_recent_transactions`; all TTL-cached 60s; calls repositories, never raw SQL
+- **2.7 ✅ Finance service** (`services/finance_service.py`) — `get_monthly_total`, `get_category_breakdown`, `get_net_debt`, `get_recent_transactions`; all TTL-cached 60s; calls repositories, never raw SQL
 
 ### Phase 3 — Investments & Goals
 
