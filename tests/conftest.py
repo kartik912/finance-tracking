@@ -31,3 +31,38 @@ def existing_config(tmp_path: pytest.TempPathFactory) -> tuple[str, dict]:
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(data, fh)
     return path, data
+
+
+@pytest.fixture()
+def fresh_db():
+    """Provide a clean in-memory SQLite DB for each test.
+
+    Resets the SQLAlchemy engine + scoped session singletons and also resets
+    any service-layer singletons that hold a reference to the old engine so
+    tests never share state.
+    """
+    from config.database import create_tables, init_db, reset_db
+
+    # Reset engine so init_db creates a fresh in-memory instance
+    reset_db()
+    init_db(":memory:")
+    create_tables()
+
+    # Reset service singletons so they bind to the new DB
+    from services.cache_service import CacheService
+    from services.finance_service import FinanceService
+
+    CacheService._instance = None  # type: ignore[attr-defined]
+    FinanceService._instance = None  # type: ignore[attr-defined]
+
+    # Reset EventBus so subscriptions from previous tests don't accumulate
+    from observers.event_bus import EventBus
+    EventBus._instance = None  # type: ignore[attr-defined]
+
+    yield
+
+    # Teardown
+    FinanceService._instance = None  # type: ignore[attr-defined]
+    CacheService._instance = None  # type: ignore[attr-defined]
+    EventBus._instance = None  # type: ignore[attr-defined]
+    reset_db()

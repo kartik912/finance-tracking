@@ -90,6 +90,20 @@ def get_session() -> scoped_session:  # type: ignore[type-arg]
     return SessionLocal  # type: ignore[return-value]
 
 
+def reset_db() -> None:
+    """Tear down the current engine and session factory.
+
+    **For use in tests only.** Clears the module-level singletons so that a
+    subsequent ``init_db()`` call creates a fresh engine (e.g. ``:memory:``).
+    """
+    global engine, SessionLocal
+    with _lock:
+        if SessionLocal is not None:
+            SessionLocal.remove()
+        engine = None
+        SessionLocal = None
+
+
 def create_tables() -> None:
     """Create all ORM-mapped tables that do not already exist.
 

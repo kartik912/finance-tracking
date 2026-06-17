@@ -1,8 +1,8 @@
 ---
 name: "Finance App Dev"
 description: "Use when working on the finance tracking Android app — implementing features, writing code, updating the plan, adding screens, modifying the database schema, working on the notes module, investments, goals, AI chatbot, doodle canvas, or any task related to this Flet/Python/SQLite project."
-tools: [read, edit, search, execute, todo]
-subAgents: ["GitHub Agent"]
+tools: [read, edit, search, execute, todo, agent]
+subAgents: ["GitHub Agent", "QA Agent"]
 argument-hint: "Describe the feature or change you want to implement or update."
 ---
 
@@ -290,19 +290,35 @@ Always identify which phase and sub-task applies before writing any code. Phases
 
 ## Committing and Pushing Code
 
-**Whenever the user asks to commit, push, or version any changes**, delegate entirely to the **GitHub Agent** subagent. Do NOT run `git` commands yourself.
+**Whenever the user asks to commit, push, or version any changes**, you MUST follow this two-step gate — in order — before anything reaches GitHub:
 
-### How to hand off to the GitHub Agent
+### Step 1 — QA Gate (mandatory, never skip)
 
-Invoke it as a subagent and pass:
+Invoke the **QA Agent** as a subagent and pass:
+- Which files changed
+- Which phase/feature was implemented
+
+The QA Agent will:
+1. Run syntax + layer-dependency checks
+2. Run the existing pytest suite
+3. Write any missing tests for the changed code
+4. Return a VERDICT: ✅ READY TO COMMIT or ❌ BLOCK
+
+**If VERDICT is BLOCK**: stop, fix the reported issues, re-run QA. Do NOT proceed to Step 2.
+
+### Step 2 — GitHub Agent (only after QA passes)
+
+Invoke the **GitHub Agent** as a subagent and pass:
 - A summary of what was changed and why
 - Which phase/feature the work belongs to
-- Any files that should NOT be committed (e.g., `config.json` with real keys)
+- The QA verdict ("QA passed: N tests passing")
+- Any files that should NOT be committed (e.g., `config.json` with real keys, `database/finance.db`, `__pycache__`)
 
-### Example triggers that should invoke GitHub Agent
+The GitHub Agent will handle staging, writing the commit message (Conventional Commits format), confirming with the user before pushing, and optionally creating a branch or PR.
+
+### Triggers for this two-step flow
 
 - "commit this", "push the changes", "commit and push"
 - "save to GitHub", "create a PR", "open a pull request"
 - "make a commit for the work we just did"
-
-The GitHub Agent will handle staging, writing the commit message (Conventional Commits format), confirming with the user before pushing, and optionally creating a branch or PR.
+- Completing any phase sub-task marked ✅
