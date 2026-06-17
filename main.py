@@ -38,6 +38,7 @@ ROUTES: dict[str, str] = {
     "/investments":  "screens.investments",
     "/goals":        "screens.goals",
     "/notes":        "screens.notebooks",
+    "/splits":       "screens.bill_splits",
 }
 
 # Tab index → route (matches NavigationBar destination order)

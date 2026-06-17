@@ -136,9 +136,9 @@ finance_tracking_app/
 - **2.1 Transaction list** - month/year selector, scrollable list grouped by date, TransactionCard with category icon + amount, swipe-to-delete (ft.Dismissible), FAB to add
 - **2.2 Add/Edit modal** - amount numpad, description, category chips, date picker, expense/income toggle, optional person link
 - **2.3 Category system** - user-created categories, each with a name, icon (picked from a preset icon set), and color; stored in a categories DB table; displayed as a horizontal chip row in forms; manage categories screen to add/edit/delete; sensible defaults (Food, Transport, Bills, etc.) seeded on first launch
-- **2.4 People management** - list with outstanding balance, add person modal, tap to view history
-- **2.5 Debt tracker** - two tabs (I Owe / They Owe), settle button creates balancing transaction, net balance total at top
-- **2.6 Bill splits** - title, total, members (from people list or new), equal or custom amounts per person, saves as debt entries, split history with status
+- ~~**2.4 People management**~~ - REMOVED: no standalone people screen; people typed inline in Bill Splits
+- ~~**2.5 Debt tracker**~~ - REMOVED: no separate debt tracker screen; debt is implicit in bill splits
+- **2.6 DONE Bill splits** - title, total, members (typed inline), equal or custom split per member, split history list with total + my share
 - **2.7 Finance service** (services/finance_service.py) - get_monthly_total, get_category_breakdown, get_net_debt, get_recent_transactions; all TTL-cached (60s); calls repositories only, no raw SQL
 
 ### Phase 3 - Investments & Goals

@@ -221,9 +221,9 @@ Always identify which phase and sub-task applies before writing any code. Phases
 - **2.1 ✅ Transaction list** — month/year selector, scrollable list grouped by **category** (expandable/collapsible groups), `TransactionCard` (category icon + amount), `ft.Dismissible` swipe-to-delete, FAB to add; groups only appear when they contain transactions; newly saved transaction auto-expands its group
 - **2.2 ✅ Add/Edit modal** — amount field, description, category chips, date picker, expense/income toggle; categories come from seed data (no separate management screen)
 - ~~**2.3 Category system**~~ — **removed**: no separate category management screen; categories are seeded on first launch (Food, Transport, Bills, etc.) and shown as chips in the add/edit modal; transactions are grouped by category directly on the Finance screen
-- **2.4 People management** — list with outstanding balance per person, add modal, tap to view transaction history
-- **2.5 Debt tracker** — two tabs (I Owe / They Owe), settle button creates balancing transaction, net balance total at top
-- **2.6 Bill splits** — title, total, members (from people list or new), equal or custom split, saves as debt entries, split history with status
+- ~~**2.4 People management**~~ — **removed**: no standalone people screen; people names typed inline in Bill Splits
+- ~~**2.5 Debt tracker**~~ — **removed**: no separate debt tracker screen; debt is implicit in bill splits
+- **2.6 ✅ Bill splits** — title, total, members (typed inline), equal or custom split per member, split history list with total + my share
 - **2.7 ✅ Finance service** (`services/finance_service.py`) — `get_monthly_total`, `get_category_breakdown`, `get_net_debt`, `get_recent_transactions`; all TTL-cached 60s; calls repositories, never raw SQL
 
 ### Phase 3 — Investments & Goals
