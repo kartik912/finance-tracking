@@ -14,7 +14,27 @@ description: >
 
 ---
 
+## 0. Border
+
+`ft.border.all()` does **not exist** in 0.85.x. Construct `ft.Border` explicitly:
+
+```python
+# ❌ Wrong — raises AttributeError
+border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT)
+
+# ✅ Correct
+border=ft.Border(
+    left=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
+    top=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
+    right=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
+    bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
+)
+```
+
+---
+
 ## 1. Padding
+
 
 | ❌ Old (removed) | ✅ 0.85.x |
 |---|---|
@@ -118,22 +138,24 @@ page.update()
 
 ## 6. Buttons
 
-| ❌ Deprecated (since 0.80, removed in 1.0) | ✅ 0.85.x replacement |
+| ❌ Deprecated / wrong | ✅ 0.85.x |
 |---|---|
 | `ft.ElevatedButton(...)` | `ft.Button(...)` |
 | `ft.OutlinedButton(...)` | `ft.Button(style=ft.ButtonStyle(side=ft.BorderSide(...)))` |
+| `ft.TextButton(text="Label", ...)` | `ft.TextButton(content="Label", ...)` or `ft.TextButton("Label", ...)` |
+| `ft.FilledButton(text="Label", ...)` | `ft.FilledButton(content="Label", ...)` or `ft.FilledButton("Label", ...)` |
 
-`ft.TextButton` and `ft.FilledButton` still work in 0.85.x.
+`ft.TextButton`, `ft.FilledButton`, and `ft.Button` all take `content` as the **first positional argument** — NOT `text=`.
 
 ```python
-# Type toggle example
-ft.Button(
-    "Expense",
-    icon=ft.Icons.ARROW_DOWNWARD,
-    style=ft.ButtonStyle(bgcolor=ft.Colors.RED_100, color=ft.Colors.RED_700),
-    expand=True,
-    on_click=_set_expense,
-)
+# ✅ Correct
+ft.TextButton("Cancel", on_click=lambda e: _close())
+ft.TextButton(content="Cancel", on_click=lambda e: _close())
+ft.FilledButton("Save", on_click=lambda e: _save())
+
+# ❌ Wrong — raises TypeError
+ft.TextButton(text="Cancel", ...)
+ft.FilledButton(text="Save", ...)
 ```
 
 ---
@@ -158,9 +180,21 @@ ft.TextField(
 
 ## 8. Navigation & Routing
 
+**`page.go()` is deprecated and must NEVER be used.** Use `push_route` instead.
+
+| ❌ Wrong | ✅ 0.85.x |
+|---|---|
+| `page.go("/finance")` | `page.run_task(page.push_route, "/finance")` (from sync context) |
+| `page.go("/finance")` | `await page.push_route("/finance")` (from async context) |
+
 ```python
-# page.go() is deprecated — use push_route (must be awaited)
-await page.push_route("/finance")
+# From a sync on_click / on_tap handler — use run_task:
+def _navigate(e: ft.ControlEvent) -> None:
+    page.run_task(page.push_route, "/finance")
+
+# From an async handler — await directly:
+async def on_change(e: ft.ControlEvent) -> None:
+    await page.push_route("/finance")
 
 # Route change handler must be sync (not async) in 0.85.x
 def _route_change(e: ft.RouteChangeEvent) -> None:

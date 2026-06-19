@@ -157,7 +157,7 @@ def build(page: ft.Page) -> ft.View:
             on_click=lambda e, gid=goal.id: _delete(gid),
         )
         add_funds_btn = ft.TextButton(
-            text="Add funds",
+            content=ft.Text("Add funds"),
             style=ft.ButtonStyle(color=text_color),
             on_click=lambda e, g=goal: _open_add_funds(g),
         )
@@ -328,8 +328,11 @@ def build(page: ft.Page) -> ft.View:
                             height=28,
                             bgcolor=hex_c,
                             border_radius=14,
-                            border=ft.border.all(
-                                3, ft.Colors.ON_SURFACE if is_selected else ft.Colors.TRANSPARENT
+                            border=ft.Border(
+                                left=ft.BorderSide(3, ft.Colors.ON_SURFACE if is_selected else ft.Colors.TRANSPARENT),
+                                top=ft.BorderSide(3, ft.Colors.ON_SURFACE if is_selected else ft.Colors.TRANSPARENT),
+                                right=ft.BorderSide(3, ft.Colors.ON_SURFACE if is_selected else ft.Colors.TRANSPARENT),
+                                bottom=ft.BorderSide(3, ft.Colors.ON_SURFACE if is_selected else ft.Colors.TRANSPARENT),
                             ),
                         ),
                         on_tap=lambda e, c=hex_c: _pick_color(c),

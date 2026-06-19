@@ -148,12 +148,12 @@ finance_tracking_app/
 - **3.3 DONE Goals screen** - 2-column GridView, progress bar (ft.ProgressBar), ₹current of ₹target + %, deadline badge (overdue/due soon/date), color-coded cards, Add funds button per card
 - **3.4 DONE Add goal modal** - name, category, target amount, starting amount, deadline date picker, color picker (8 preset swatches); all inputs validated in GoalService
 
-### Phase 4 - Dashboard (depends on Phase 2 + 3)
+### Phase 4 - Dashboard ✅ (depends on Phase 2 + 3)
 
-- **4.1 Summary cards** - horizontal scroll: This Month's Spend, Net Debt, Portfolio Value, Goals Progress - each tappable to navigate
-- **4.2 Recent transactions** - last 5 using shared TransactionCard, See all link
-- **4.3 Category chart** - donut/arc chart drawn on ft.Canvas showing top 4 spend categories for current month
-- **4.4 Quick-add FAB** - speed dial with 3 actions: Add Expense, Add Income, Add Split
+- **4.1 DONE Summary cards** - horizontal scroll: Spent this Month, Earned this Month, Portfolio Value, Goals Progress — each tappable via Container on_click → push_route
+- **4.2 DONE Recent transactions** - last 5 using shared TransactionCard component, "See all" TextButton → /finance
+- **4.3 DONE Category chart** - donut/arc chart on cv.Canvas (Arc shapes, PaintingStyle.STROKE), top 4 spend categories, legend with % breakdown
+- **4.4 DONE Quick-add FAB** - speed-dial (Stack + Column of mini FABs): Add Expense (inline dialog), Add Income (inline dialog), Add Split (→ /splits)
 
 ### Phase 5 - Notes Module
 
