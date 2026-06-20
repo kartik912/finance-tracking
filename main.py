@@ -129,13 +129,39 @@ def _route_change(e: ft.RouteChangeEvent) -> None:
         _nav_bar.selected_index = TAB_ROUTES.index(route)
 
     # Lazy-import the screen module and call its build() function
-    module_path = ROUTES.get(route)
+    import importlib
+    view: ft.View | None = None
 
-    if module_path:
-        import importlib
-        module = importlib.import_module(module_path)
-        view: ft.View = module.build(page)
+    # ----- Parameterised routes ----------------------------------------
+    parts = route.split("/")  # e.g. ["", "notes_list", "3"] or ["", "note_editor", "3", "7", "text"]
+
+    if len(parts) >= 3 and parts[1] == "notes_list":
+        try:
+            notebook_id = int(parts[2])
+        except (ValueError, IndexError):
+            notebook_id = 0
+        module = importlib.import_module("screens.notes_list")
+        view = module.build(page, notebook_id)
+
+    elif len(parts) >= 5 and parts[1] == "note_editor":
+        try:
+            notebook_id = int(parts[2])
+            note_id = int(parts[3])
+            note_type = parts[4]
+        except (ValueError, IndexError):
+            notebook_id = note_id = 0
+            note_type = "text"
+        module = importlib.import_module("screens.note_editor")
+        view = module.build(page, notebook_id, note_id, note_type)
+
+    # ----- Static routes -----------------------------------------------
     else:
+        module_path = ROUTES.get(route)
+        if module_path:
+            module = importlib.import_module(module_path)
+            view = module.build(page)
+
+    if view is None:
         # 404 fallback
         view = ft.View(
             route=route,

@@ -59,6 +59,12 @@ def fresh_db():
     InvestmentService._instance = None  # type: ignore[attr-defined]
     GoalService._instance = None  # type: ignore[attr-defined]
 
+    # Reset Phase 5 service singletons
+    from services.notebook_service import NotebookService
+    from services.note_service import NoteService
+    NotebookService._instance = None  # type: ignore[attr-defined]
+    NoteService._instance = None  # type: ignore[attr-defined]
+
     # Reset EventBus so subscriptions from previous tests don't accumulate
     from observers.event_bus import EventBus
     EventBus._instance = None  # type: ignore[attr-defined]
@@ -69,4 +75,8 @@ def fresh_db():
     FinanceService._instance = None  # type: ignore[attr-defined]
     CacheService._instance = None  # type: ignore[attr-defined]
     EventBus._instance = None  # type: ignore[attr-defined]
+    from services.notebook_service import NotebookService
+    from services.note_service import NoteService
+    NotebookService._instance = None  # type: ignore[attr-defined]
+    NoteService._instance = None  # type: ignore[attr-defined]
     reset_db()

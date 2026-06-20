@@ -85,24 +85,22 @@ ft.Icon(name="home", ...)
 
 ## 4. Dialogs (AlertDialog, BottomSheet)
 
-`page.open()` and `page.close()` do **not exist** in 0.85.x. Use `page.overlay`:
+`page.open()`, `page.close()`, and `page.show_dialog()` do **not exist** in 0.85.x (or are unreliable). Always use `page.overlay`:
 
 ```python
 # Open a dialog
-def _close_dlg() -> None:
+def _close_dlg(dlg: ft.AlertDialog) -> None:
     dlg.open = False
     page.update()
-
-def _on_dismiss(e: ft.ControlEvent) -> None:
     if dlg in page.overlay:
         page.overlay.remove(dlg)
+    page.update()
 
 dlg = ft.AlertDialog(
     title=ft.Text("Title"),
-    on_dismiss=_on_dismiss,   # ← fires after close animation; remove from overlay here
     content=...,
     actions=[
-        ft.TextButton("Cancel", on_click=lambda e: _close_dlg()),
+        ft.TextButton("Cancel", on_click=lambda e: _close_dlg(dlg)),
         ft.FilledButton("OK", on_click=lambda e: _save()),
     ],
 )
@@ -113,10 +111,11 @@ page.update()
 ```
 
 **Rules:**
-- `_close_dlg` must be defined **before** `dlg` (referenced in actions)
-- Only set `dlg.open = False` + `page.update()` to close — do NOT remove from overlay here
-- Remove from overlay only in `on_dismiss` (fires after the animation completes)
-- Never call `page.overlay.remove(dlg)` before `page.update()` — it tears the control mid-animation and Flet ignores the close
+- Always `page.overlay.append(dlg)` → `dlg.open = True` → `page.update()` to open
+- Always `dlg.open = False` → `page.update()` → `page.overlay.remove(dlg)` → `page.update()` to close
+- **Never** call `page.open(dlg)` — raises `AttributeError: 'Page' object has no attribute 'open'`
+- **Never** call `page.show_dialog(dlg)` — unreliable across Flet versions
+- Define `_close_dlg` **before** creating the dialog (it's referenced in `actions`)
 
 ---
 
@@ -252,6 +251,16 @@ ft.Colors.ERROR
 ft.Colors.WHITE
 ```
 
+**Alpha-suffixed colors use an underscore separator:**
+
+| ❌ Wrong (raises DeprecationWarning) | ✅ Correct |
+|---|---|
+| `ft.Colors.WHITE70` | `ft.Colors.WHITE_70` |
+| `ft.Colors.BLACK54` | `ft.Colors.BLACK_54` |
+| `ft.Colors.BLACK87` | `ft.Colors.BLACK_87` |
+
+Always separate the alpha number with `_` (e.g. `WHITE_70`, not `WHITE70`).
+
 ---
 
 ## 12. Icons
@@ -277,7 +286,10 @@ ft.Icons.ARROW_DOWNWARD
 ft.ScrollMode.AUTO      # show scrollbar only when needed
 ft.ScrollMode.ALWAYS    # always show scrollbar
 ft.ScrollMode.HIDDEN    # scrollable but no scrollbar
+ft.ScrollMode.ADAPTIVE  # platform-appropriate behaviour
 ```
+
+`ft.ScrollMode.DISABLED` does **not exist** — raises `AttributeError`. Use `ft.ScrollMode.HIDDEN` when you want scrolling without a visible scrollbar.
 
 Used in: `ft.Row(scroll=ft.ScrollMode.AUTO)`, `ft.Column(scroll=...)`, `ft.ListView`.
 
