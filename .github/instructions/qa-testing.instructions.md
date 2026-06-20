@@ -192,7 +192,51 @@ def test_invalidate_by_prefix():
 
 ---
 
-## Naming & Structure Rules
+## Screen Smoke Tests (`tests/test_screens_smoke.py`) — NEW, mandatory
+
+The backend test matrix above (models/repos/services) never imports anything from
+`screens/` or `components/`. That's the gap that lets Flet API misuse (wrong kwargs,
+removed methods — see `flet-api.instructions.md`) pass every existing test and still
+crash the app on first launch. Close it with a construction-only smoke test:
+
+```python
+import importlib
+import pkgutil
+import pytest
+import screens
+
+class StubPage:
+    """Minimal stand-in for ft.Page — just enough surface for build(page) to run
+    without opening a real window. Extend with attributes as screens need them."""
+    def __init__(self):
+        self.overlay = []
+        self.views = []
+        self.route = "/"
+    def update(self):
+        pass
+
+def _all_screen_modules():
+    return [m.name for m in pkgutil.iter_modules(screens.__path__)]
+
+@pytest.mark.parametrize("module_name", _all_screen_modules())
+def test_screen_builds_without_exception(module_name, fresh_db):
+    mod = importlib.import_module(f"screens.{module_name}")
+    page = StubPage()
+    view = mod.build(page)  # must not raise
+    assert view is not None
+```
+
+This does NOT replace manual visual testing on a device — it only proves the screen
+*constructs* without throwing. It will catch every category of bug in the grep list at
+the top of `flet-api.instructions.md`, because those are all runtime `AttributeError`/
+`TypeError`s that fire the moment the control is built.
+
+If a screen's `build(page)` needs something the stub doesn't have (e.g. `page.client_storage`),
+add it to `StubPage` rather than skipping that screen from the parametrize list.
+
+---
+
+
 
 - File: `tests/test_<layer>_<entity>.py` or `tests/test_<module>.py`
 - Function: `test_<what>_<condition>` e.g. `test_add_transaction_negative_amount`

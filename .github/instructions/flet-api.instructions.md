@@ -11,6 +11,30 @@ description: >
 
 > Flet version in this project: **0.85.3**
 > Python: 3.13 · Target: Android (flet build apk) + Desktop dev
+>
+> ⚠️ If you bump the `flet` version in `requirements.txt`, this entire file needs a
+> re-audit before the next commit — these are not stylistic preferences, they're API
+> calls that raise at runtime in this specific version.
+
+## Grep List — used verbatim by `scripts/qa_check.ps1` Step 3
+
+Any of these patterns in `screens/`, `components/`, or `main.py` is an automatic QA BLOCK:
+
+| Forbidden pattern | Why |
+|---|---|
+| `ft.border.all(` | doesn't exist in 0.85.x — see §0 |
+| `page.go(` | deprecated, never use — see §8 |
+| `page.open(` | doesn't exist — see §4 |
+| `page.show_dialog(` | unreliable — see §4 |
+| `ft.ElevatedButton(` / `ft.OutlinedButton(` | removed — see §6 |
+| `text="` on `TextButton`/`FilledButton` | wrong kwarg, use `content=` or positional — see §6 |
+| `name="` on `ft.Icon(` | wrong kwarg, icon name is positional — see §3 |
+| `prefix_text=` / `suffix_text=` | removed — see §7 |
+| `ScrollMode.DISABLED` | doesn't exist — see §13 |
+| `ft.colors.` / `ft.icons.` (lowercase) | deprecated namespace — see §11, §12 |
+
+If this list and the detailed sections below ever disagree, the detailed section wins —
+update this table to match.
 
 ---
 

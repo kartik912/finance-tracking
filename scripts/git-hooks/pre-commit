@@ -1,0 +1,33 @@
+#!/bin/sh
+# Git pre-commit hook — actually blocks a bad commit at the git level,
+# independent of whether the chat agent remembered to run QA this session.
+#
+# One-time setup (run once from repo root):
+#   git config core.hooksPath scripts/git-hooks
+#
+# This calls qa_check.ps1 via PowerShell. Skips automatically if PowerShell
+# isn't on PATH (e.g. committing from WSL) — in that case run qa_check.ps1
+# manually before pushing.
+
+if command -v pwsh >/dev/null 2>&1; then
+    PWSH=pwsh
+elif command -v powershell >/dev/null 2>&1; then
+    PWSH=powershell
+else
+    echo "WARNING: PowerShell not found on PATH — skipping automated QA check."
+    echo "Run scripts/qa_check.ps1 manually before pushing."
+    exit 0
+fi
+
+echo "Running QA check before commit..."
+$PWSH -NoProfile -ExecutionPolicy Bypass -File scripts/qa_check.ps1
+status=$?
+
+if [ $status -ne 0 ]; then
+    echo ""
+    echo "COMMIT BLOCKED — qa_check.ps1 failed. Fix the issues above, or in an emergency:"
+    echo "  git commit --no-verify   (use sparingly, and say so in the commit body)"
+    exit 1
+fi
+
+exit 0
