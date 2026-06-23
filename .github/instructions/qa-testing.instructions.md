@@ -236,6 +236,199 @@ add it to `StubPage` rather than skipping that screen from the parametrize list.
 
 ---
 
+## Note Editor Tests (`tests/test_note_editor_format.py` and `tests/test_screens_smoke.py`)
+
+The note editor is the most complex screen. Any change to `note_editor.py`,
+`note_service.py`, or `models/note.py` requires these tests — add them if missing.
+
+### Pure format function (module-level, no Flet dependency)
+
+```python
+from screens.note_editor import apply_text_format
+
+class TestSelectionWrapping:
+    def test_wraps_selected_range(self):
+        assert apply_text_format("hello world", 6, 11, "**", "**", "bold") \
+            == "hello **world**"
+
+    def test_wraps_full_string(self):
+        assert apply_text_format("hi", 0, 2, "_", "_", "italic") == "_hi_"
+
+    def test_open_close_tags_differ(self):
+        assert apply_text_format("text", 0, 4, "<u>", "</u>", "underline") \
+            == "<u>text</u>"
+
+class TestPlaceholderInsertion:
+    def test_no_selection_inserts_placeholder(self):
+        result = apply_text_format("abc", -1, -1, "**", "**", "bold")
+        assert "**bold**" in result
+
+    def test_cursor_at_start(self):
+        result = apply_text_format("abc", 0, 0, "**", "**", "bold")
+        assert result.startswith("**bold**")
+
+    def test_cursor_at_end(self):
+        result = apply_text_format("abc", 3, 3, "**", "**", "bold")
+        assert result.endswith("**bold**")
+
+    def test_empty_string_no_crash(self):
+        result = apply_text_format("", -1, -1, "_", "_", "italic")
+        assert result == "_italic_"
+
+class TestEdgeCases:
+    def test_start_equals_end_uses_placeholder(self):
+        result = apply_text_format("hello", 2, 2, "**", "**", "bold")
+        assert "**bold**" in result
+
+    def test_start_beyond_length_appends(self):
+        result = apply_text_format("abc", 99, 99, "_", "_", "italic")
+        assert result == "abc_italic_"
+
+    def test_reversed_offsets_treated_as_no_selection(self):
+        # start > end after min/max correction → falls through to placeholder
+        result = apply_text_format("hello", 4, 2, "**", "**", "bold")
+        # after min/max: start=2, end=4 → wraps "ll"
+        assert "**ll**" in result
+```
+
+### Stack layer order and preview mode (in `tests/test_screens_smoke.py`)
+
+```python
+class TestNoteEditorLayout:
+    def test_stack_layer_order(self, page, nb, note):
+        """canvas[0], text_layer[1], gesture_catcher[2] — non-negotiable."""
+        import flet as ft
+        import screens.note_editor as m
+        view = m.build(page, nb.id, note.id)
+        stack = _find_main_stack(view)  # helper already in test_screens_smoke.py
+        assert stack is not None
+        assert len(stack.controls) == 3
+        # canvas_layer (index 0) must be visible
+        assert getattr(stack.controls[0], "visible", True) is not False
+        # gesture_catcher (index 2) must be hidden at build time
+        assert getattr(stack.controls[2], "visible", True) is False
+
+    def test_preview_starts_in_edit_mode(self, page, nb, note):
+        """content_field visible=True, content_preview_wrap visible=False at build."""
+        import flet as ft
+        import screens.note_editor as m
+        view = m.build(page, nb.id, note.id)
+
+        def _find_stacks(ctrl, acc):
+            if isinstance(ctrl, ft.Stack) and getattr(ctrl, "controls", None):
+                acc.append(ctrl)
+            for attr in ("controls", "content"):
+                child = getattr(ctrl, attr, None)
+                if isinstance(child, list):
+                    for c in child: _find_stacks(c, acc)
+                elif child is not None:
+                    _find_stacks(child, acc)
+
+        all_stacks = []
+        _find_stacks(view, all_stacks)
+        content_stacks = [s for s in all_stacks if len(s.controls) == 2]
+        assert content_stacks, "Expected inner 2-child Stack for edit/preview toggle"
+        inner = content_stacks[0]
+        # controls[0] = content_field (TextField), controls[1] = preview wrap (Container)
+        assert getattr(inner.controls[0], "visible", True) is not False, \
+            "content_field must be visible in edit mode"
+        assert getattr(inner.controls[1], "visible", True) is False, \
+            "content_preview_wrap must be hidden in edit mode"
+
+    def test_builds_with_existing_strokes(self, page, nb, note_with_strokes):
+        """Note with valid content_strokes JSON loads without crash."""
+        import screens.note_editor as m
+        view = m.build(page, nb.id, note_with_strokes.id)
+        assert view is not None
+
+    def test_builds_with_corrupt_strokes(self, page, nb, note_with_corrupt_strokes):
+        """Note with invalid JSON in content_strokes must not crash — graceful fallback."""
+        import screens.note_editor as m
+        view = m.build(page, nb.id, note_with_corrupt_strokes.id)
+        assert view is not None
+```
+
+Add these fixtures to `conftest.py` if missing:
+
+```python
+@pytest.fixture
+def note_with_strokes(nb, fresh_db):
+    from services.note_service import NoteService
+    import json
+    NoteService._instance = None
+    svc = NoteService.instance()
+    note = svc.create_note(nb.id, "Stroke Note", "body")
+    strokes = json.dumps([{"x1": 0, "y1": 0, "x2": 10, "y2": 10,
+                           "color": "#FF0000", "size": 3}])
+    svc.update_note_strokes(note.id, strokes)
+    return svc.get_note_by_id(note.id)
+
+@pytest.fixture
+def note_with_corrupt_strokes(nb, fresh_db):
+    from services.note_service import NoteService
+    NoteService._instance = None
+    svc = NoteService.instance()
+    note = svc.create_note(nb.id, "Corrupt Strokes", "body")
+    svc.update_note_strokes(note.id, "NOT_VALID_JSON{{{{")
+    return svc.get_note_by_id(note.id)
+```
+
+### Dialog open/close regression tests
+
+```python
+def test_create_notebook_dialog_cancel_does_not_crash(self, page):
+    """Cancel button must close the dialog without raising — tests the on_dismiss pattern."""
+    import screens.notebooks as m
+    view = m.build(page)
+    # Find the FAB or action that opens create-dialog and trigger it
+    # Then trigger cancel — must not raise
+    # (Extend with your actual control-tree walker as needed)
+    assert view is not None  # construction baseline
+
+def test_note_editor_note_not_found_returns_view(self, page, nb):
+    """build() with a non-existent note_id returns a View, not None."""
+    import screens.note_editor as m
+    view = m.build(page, nb.id, note_id=999999)
+    assert view is not None
+```
+
+---
+
+## Design / Layout Regression Checks
+
+These are checked programmatically in `test_screens_smoke.py` where possible:
+
+```python
+def _all_controls_flat(ctrl, acc=None):
+    """Flatten the full control tree into a list."""
+    if acc is None:
+        acc = []
+    acc.append(ctrl)
+    for attr in ("controls", "content", "actions"):
+        child = getattr(ctrl, attr, None)
+        if isinstance(child, list):
+            for c in child:
+                _all_controls_flat(c, acc)
+        elif child is not None:
+            _all_controls_flat(child, acc)
+    return acc
+
+def test_no_elevatedbutton_or_outlinedbutton(self, page):
+    """ft.ElevatedButton and ft.OutlinedButton were removed in 0.85.x."""
+    import flet as ft
+    for screen_mod in _all_screen_modules():
+        mod = importlib.import_module(f"screens.{screen_mod}")
+        view = mod.build(page)
+        for ctrl in _all_controls_flat(view):
+            assert not isinstance(ctrl, ft.ElevatedButton), \
+                f"{screen_mod}: ft.ElevatedButton found — use ft.FilledButton"
+            assert not isinstance(ctrl, ft.OutlinedButton), \
+                f"{screen_mod}: ft.OutlinedButton found — use ft.TextButton"
+```
+
+---
+
+## Naming Conventions
 
 
 - File: `tests/test_<layer>_<entity>.py` or `tests/test_<module>.py`

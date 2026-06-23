@@ -152,5 +152,15 @@ def run_migration(target_version: int) -> None:
                 # conn.execute(text("ALTER TABLE transactions ADD COLUMN notes TEXT"))
                 conn.execute(text("UPDATE schema_version SET version = 2"))
                 current = 2
+            elif current == 2:
+                # v2 → v3: add strokes JSON column to notes table
+                try:
+                    conn.execute(text(
+                        "ALTER TABLE notes ADD COLUMN content_strokes TEXT"
+                    ))
+                except Exception:  # noqa: BLE001
+                    pass  # column already exists (safe to ignore)
+                conn.execute(text("UPDATE schema_version SET version = 3"))
+                current = 3
             else:
                 break  # no migration defined for this version

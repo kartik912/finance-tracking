@@ -196,17 +196,24 @@ def build(page: ft.Page) -> ft.View:
         # replace the placeholder containers
         dlg.content.controls[2] = e_row
         dlg.content.controls[4] = c_row
+        dlg.on_dismiss = _on_dlg_dismiss(dlg)
 
         page.overlay.append(dlg)
         dlg.open = True
         page.update()
 
     def _close_dlg(dlg: ft.AlertDialog) -> None:
+        """Close the dialog. on_dismiss handles overlay cleanup after Flutter's animation."""
         dlg.open = False
         page.update()
-        if dlg in page.overlay:
-            page.overlay.remove(dlg)
-        page.update()
+
+    def _on_dlg_dismiss(d: ft.AlertDialog):
+        """Return an on_dismiss handler that removes d from the overlay once closed."""
+        def handler(e: ft.ControlEvent) -> None:
+            if d in page.overlay:
+                page.overlay.remove(d)
+            page.update()
+        return handler
 
     def _do_create(dlg: ft.AlertDialog, name_field: ft.TextField, err_text: ft.Text) -> None:
         name = name_field.value or ""
@@ -217,11 +224,7 @@ def build(page: ft.Page) -> ft.View:
             err_text.visible = True
             page.update()
             return
-        dlg.open = False
-        page.update()
-        if dlg in page.overlay:
-            page.overlay.remove(dlg)
-        page.update()
+        _close_dlg(dlg)
         _refresh()
 
     # ------------------------------------------------------------------ #
@@ -262,6 +265,7 @@ def build(page: ft.Page) -> ft.View:
                 ],
                 actions_alignment=ft.MainAxisAlignment.END,
             )
+            confirm_dlg.on_dismiss = _on_dlg_dismiss(confirm_dlg)
             page.overlay.append(confirm_dlg)
             confirm_dlg.open = True
             page.update()
@@ -280,8 +284,95 @@ def build(page: ft.Page) -> ft.View:
             ],
             actions_alignment=ft.MainAxisAlignment.END,
         )
+        options_dlg.on_dismiss = _on_dlg_dismiss(options_dlg)
         page.overlay.append(options_dlg)
         options_dlg.open = True
+        page.update()
+
+    # ------------------------------------------------------------------ #
+    # Delete notebooks (multi-select)
+    # ------------------------------------------------------------------ #
+    def _show_delete_selection() -> None:
+        notebooks = svc.get_all()
+        if not notebooks:
+            return
+
+        selected_ids: list[int] = []
+
+        def _toggle_id(nb_id: int, checked: bool) -> None:
+            if checked:
+                if nb_id not in selected_ids:
+                    selected_ids.append(nb_id)
+            else:
+                if nb_id in selected_ids:
+                    selected_ids.remove(nb_id)
+
+        err_label = ft.Text("", color=ft.Colors.ERROR, size=12, visible=False)
+
+        def _do_delete_selected(dlg: ft.AlertDialog) -> None:
+            if not selected_ids:
+                err_label.value = "Select at least one notebook first."
+                err_label.visible = True
+                page.update()
+                return
+            try:
+                for nb_id in list(selected_ids):
+                    svc.delete_notebook(nb_id)
+            except Exception as exc:  # noqa: BLE001
+                err_label.value = f"Delete failed: {exc}"
+                err_label.visible = True
+                page.update()
+                return
+            _close_dlg(dlg)
+            _refresh()
+
+        items = [
+            ft.Row(
+                [
+                    ft.Checkbox(
+                        value=False,
+                        # e.data is "true"/"false" as string in most Flet builds,
+                        # but may be a bool — str().lower() handles both safely.
+                        on_change=lambda e, nid=nb.id: _toggle_id(
+                            nid, str(e.data).lower() == "true"
+                        ),
+                    ),
+                    ft.Text(
+                        f"{nb.emoji or chr(0x1F4D3)} {nb.name}",
+                        size=15,
+                        expand=True,
+                        overflow=ft.TextOverflow.ELLIPSIS,
+                    ),
+                ],
+                spacing=8,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            )
+            for nb in notebooks
+        ]
+
+        dlg = ft.AlertDialog(
+            title=ft.Text("Delete notebooks"),
+            content=ft.Column(
+                [*items, err_label],
+                spacing=4,
+                scroll=ft.ScrollMode.AUTO,
+                tight=True,
+                width=300,
+                height=min(len(notebooks) * 56 + 24, 340),
+            ),
+            actions=[
+                ft.TextButton("Cancel", on_click=lambda e: _close_dlg(dlg)),
+                ft.FilledButton(
+                    "Delete selected",
+                    on_click=lambda e: _do_delete_selected(dlg),
+                    style=ft.ButtonStyle(bgcolor=ft.Colors.ERROR),
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        dlg.on_dismiss = _on_dlg_dismiss(dlg)
+        page.overlay.append(dlg)
+        dlg.open = True
         page.update()
 
     # ------------------------------------------------------------------ #
@@ -295,6 +386,13 @@ def build(page: ft.Page) -> ft.View:
             title=ft.Text("Notebooks"),
             center_title=False,
             bgcolor=ft.Colors.SURFACE,
+            actions=[
+                ft.IconButton(
+                    ft.Icons.DELETE_OUTLINE,
+                    tooltip="Delete notebooks",
+                    on_click=lambda e: _show_delete_selection(),
+                ),
+            ],
         ),
         controls=[
             ft.Stack(

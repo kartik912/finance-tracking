@@ -21,7 +21,7 @@ import os
 
 import flet as ft
 
-from config.database import create_tables, init_db
+from config.database import create_tables, init_db, run_migration
 from config.settings import load as load_config
 from services.cache_service import CacheService
 
@@ -143,16 +143,14 @@ def _route_change(e: ft.RouteChangeEvent) -> None:
         module = importlib.import_module("screens.notes_list")
         view = module.build(page, notebook_id)
 
-    elif len(parts) >= 5 and parts[1] == "note_editor":
+    elif len(parts) >= 4 and parts[1] == "note_editor":
         try:
             notebook_id = int(parts[2])
             note_id = int(parts[3])
-            note_type = parts[4]
         except (ValueError, IndexError):
             notebook_id = note_id = 0
-            note_type = "text"
         module = importlib.import_module("screens.note_editor")
-        view = module.build(page, notebook_id, note_id, note_type)
+        view = module.build(page, notebook_id, note_id)
 
     # ----- Static routes -----------------------------------------------
     else:
@@ -204,6 +202,7 @@ async def main(page: ft.Page) -> None:
     db_path = os.path.join(app_data if app_data else "database", "finance.db")
     init_db(db_path)
     create_tables()
+    run_migration(3)  # apply any pending schema migrations
 
     # ---- Initialise cache service ------------------------------------------
     cache = CacheService.instance()

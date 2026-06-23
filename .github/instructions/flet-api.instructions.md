@@ -112,13 +112,20 @@ ft.Icon(name="home", ...)
 `page.open()`, `page.close()`, and `page.show_dialog()` do **not exist** in 0.85.x (or are unreliable). Always use `page.overlay`:
 
 ```python
-# Open a dialog
+# Correct pattern — matches dashboard.py (the known-working reference)
+def _on_dlg_dismiss(d: ft.AlertDialog):
+    """Factory: returns on_dismiss handler that removes d from overlay after animation."""
+    def handler(e: ft.ControlEvent) -> None:
+        if d in page.overlay:
+            page.overlay.remove(d)
+        page.update()
+    return handler
+
 def _close_dlg(dlg: ft.AlertDialog) -> None:
+    """Only set open=False and update. Do NOT touch page.overlay here."""
     dlg.open = False
     page.update()
-    if dlg in page.overlay:
-        page.overlay.remove(dlg)
-    page.update()
+    # Flutter fires on_dismiss after the close animation; that handler cleans up overlay.
 
 dlg = ft.AlertDialog(
     title=ft.Text("Title"),
@@ -128,6 +135,7 @@ dlg = ft.AlertDialog(
         ft.FilledButton("OK", on_click=lambda e: _save()),
     ],
 )
+dlg.on_dismiss = _on_dlg_dismiss(dlg)   # set AFTER dlg is created (forward ref)
 
 page.overlay.append(dlg)
 dlg.open = True
@@ -135,11 +143,13 @@ page.update()
 ```
 
 **Rules:**
-- Always `page.overlay.append(dlg)` → `dlg.open = True` → `page.update()` to open
-- Always `dlg.open = False` → `page.update()` → `page.overlay.remove(dlg)` → `page.update()` to close
+- To open: `page.overlay.append(dlg)` → `dlg.on_dismiss = _on_dlg_dismiss(dlg)` → `dlg.open = True` → `page.update()`
+- To close: `dlg.open = False` → `page.update()` — **nothing else**
+- Overlay cleanup is done inside `on_dismiss` which Flutter fires after the close animation
+- **NEVER** call `page.overlay.remove(dlg)` inside a button `on_click` or `_close_dlg` — this races with Flutter's dismiss animation and prevents the dialog from visually closing
 - **Never** call `page.open(dlg)` — raises `AttributeError: 'Page' object has no attribute 'open'`
 - **Never** call `page.show_dialog(dlg)` — unreliable across Flet versions
-- Define `_close_dlg` **before** creating the dialog (it's referenced in `actions`)
+- Define `_close_dlg` and `_on_dlg_dismiss` **before** creating the dialog
 
 ---
 

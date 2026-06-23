@@ -228,7 +228,6 @@ def seed_goals(repo: GoalRepository) -> None:
 def seed_notebooks(repo: NotebookRepository) -> list[int]:
     """Insert sample notebooks and return their ids."""
     rows = [
-        ("Finance Notes",  "#45B7D1", "💰"),
         ("Personal Diary", "#96CEB4", "📔"),
         ("Work Ideas",     "#FFEAA7", "💡"),
     ]
@@ -250,21 +249,6 @@ def seed_notes(
     # Text notes
     n1 = note_repo.insert(Note(
         notebook_id=notebook_ids[0],
-        title="Monthly Budget Plan",
-        content_text=(
-            "## July Budget\n"
-            "- Food: ₹6,000\n"
-            "- Transport: ₹3,000\n"
-            "- Entertainment: ₹2,000\n"
-            "- Savings target: ₹15,000"
-        ),
-        note_type="text",
-        created_at=ts(5),
-    ))
-    print(f"  Note (text): Monthly Budget Plan")
-
-    n2 = note_repo.insert(Note(
-        notebook_id=notebook_ids[1],
         title="Weekend Goals",
         content_text="- [ ] Go for a run\n- [x] Call mom\n- [ ] Read 30 pages",
         note_type="text",
@@ -273,26 +257,15 @@ def seed_notes(
     print(f"  Note (text): Weekend Goals")
 
     # Image note (path is relative — no real file needed for seed)
-    n3 = note_repo.insert(Note(
-        notebook_id=notebook_ids[2],
+    n2 = note_repo.insert(Note(
+        notebook_id=notebook_ids[1],
         title="Whiteboard Sketch",
         content_text=None,
         note_type="image",
         created_at=ts(1),
     ))
-    image_repo.insert(NoteImage(note_id=n3.id, image_path="note_images/sketch_001.jpg"))
+    image_repo.insert(NoteImage(note_id=n2.id, image_path="note_images/sketch_001.jpg"))
     print(f"  Note (image): Whiteboard Sketch")
-
-    # Doodle note
-    n4 = note_repo.insert(Note(
-        notebook_id=notebook_ids[0],
-        title="Budget Doodle",
-        content_text=None,
-        note_type="doodle",
-        created_at=ts(0),
-    ))
-    doodle_repo.insert(NoteDoodle(note_id=n4.id, doodle_path="note_doodles/budget_doodle_001.png"))
-    print(f"  Note (doodle): Budget Doodle")
 
 
 def seed_chat_messages(repo: ChatMessageRepository) -> None:

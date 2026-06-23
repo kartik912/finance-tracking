@@ -230,6 +230,7 @@ def build(page: ft.Page) -> ft.View:
         def _on_dismiss(e: ft.ControlEvent) -> None:
             if dlg in page.overlay:
                 page.overlay.remove(dlg)
+            page.update()
 
         def _save() -> None:
             error_text.value = ""
@@ -370,6 +371,7 @@ def build(page: ft.Page) -> ft.View:
         def _on_dismiss(e: ft.ControlEvent) -> None:
             if dlg in page.overlay:
                 page.overlay.remove(dlg)
+            page.update()
 
         def _save() -> None:
             error_text.value = ""

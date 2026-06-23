@@ -25,16 +25,16 @@ a file that's reloaded into every chat turn.
 - 2.7 ✅ Finance service
 
 ## Phase 3 — Investments & Goals
-- 3.1 ⬜ Investments screen
-- 3.2 ⬜ Add/Edit investment modal
-- 3.3 ⬜ Goals screen
-- 3.4 ⬜ Add goal modal
+- 3.1 ✅ Investments screen
+- 3.2 ✅ Add/Edit investment modal
+- 3.3 ✅ Goals screen
+- 3.4 ✅ Add goal modal
 
 ## Phase 4 — Dashboard (depends on Phase 2 + 3)
-- 4.1 ⬜ Summary cards
-- 4.2 ⬜ Recent transactions
-- 4.3 ⬜ Category chart
-- 4.4 ⬜ Quick-add FAB
+- 4.1 ✅ Summary cards
+- 4.2 ✅ Recent transactions
+- 4.3 ✅ Category chart
+- 4.4 ✅ Quick-add FAB
 
 ## Phase 5 — Notes Module
 - 5.1 ⬜ Notebooks grid

@@ -33,12 +33,15 @@ You are the **architect and lead developer** of the Finance Tracking App.
 ## Definition of Done (do not call a task finished without this)
 A change is "done" only when **all** of the following are true:
 - [ ] Code follows `architecture.instructions.md` and `flet-api.instructions.md`
+- [ ] **QA Agent invoked immediately after finishing implementation** — not deferred to commit time
 - [ ] `scripts/qa_check.ps1` exits 0 (this includes the UI smoke test, not just pytest)
+- [ ] Tests written for every new feature/behaviour (QA Agent Step 6 handles this)
 - [ ] `PROGRESS.md` updated if a sub-task or phase status changed
 - [ ] No `config.json`, `.env`, `database/finance.db`, or `__pycache__` is staged
 
 "Pytest passed" alone is NOT done — `qa_check.ps1` also runs a smoke-construction pass
-over every screen, which is where most regressions in this project actually happen.
+over every screen, note-editor domain checks, and a design/layout audit.
+QA is not a commit gate — it runs after EVERY code change, sub-task by sub-task.
 
 ## Commit & Push Workflow — mandatory two-step gate
 

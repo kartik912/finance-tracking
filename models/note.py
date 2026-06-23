@@ -19,6 +19,7 @@ class Note(Base):
     )
     title = Column(String(500))
     content_text = Column(Text)
+    content_strokes = Column(Text, nullable=True)  # JSON list of stroke dicts
     note_type = Column(String(20), nullable=False)
     created_at = Column(String(30), nullable=False)
 
@@ -29,6 +30,7 @@ class Note(Base):
             "notebook_id": self.notebook_id,
             "title": self.title,
             "content_text": self.content_text,
+            "content_strokes": self.content_strokes,
             "note_type": self.note_type,
             "created_at": self.created_at,
         }

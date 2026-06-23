@@ -18,7 +18,7 @@ from repositories.note_image_repository import NoteImageRepository
 from repositories.note_repository import NoteRepository
 from services.cache_service import CacheService
 
-NOTE_TYPES = ["text", "image", "doodle"]
+NOTE_TYPES = ["text", "image", "doodle", "unified"]
 
 # App data directory: use a subfolder inside the project for desktop;
 # override via environment variable for Android (set by Flet runtime).
@@ -82,7 +82,7 @@ class NoteService:
     # ------------------------------------------------------------------
 
     def create_note(
-        self, notebook_id: int, note_type: str, title: str = ""
+        self, notebook_id: int, note_type: str = "unified", title: str = ""
     ) -> Note:
         """Create a new empty note of the given type.
 
@@ -127,6 +127,16 @@ class NoteService:
             return None
         note.title = title or "Untitled"
         note.content_text = content_text
+        updated = self._repo.update(note)
+        self._cache.invalidate("notes")
+        return updated
+
+    def update_note_strokes(self, note_id: int, strokes_json: str) -> Note | None:
+        """Persist the serialised stroke data (JSON) for a unified note."""
+        note = self._repo.get_by_id(note_id)
+        if note is None:
+            return None
+        note.content_strokes = strokes_json
         updated = self._repo.update(note)
         self._cache.invalidate("notes")
         return updated

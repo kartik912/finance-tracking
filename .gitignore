@@ -25,6 +25,11 @@ config.json
 *.db-shm
 *.db-wal
 
+# Runtime user data (note images, doodles)
+data/note_images/
+data/note_doodles/
+storage/
+
 # OS files
 .DS_Store
 Thumbs.db

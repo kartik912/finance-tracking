@@ -1,7 +1,7 @@
-"""Notes list screen — Phase 5.2.
+"""Notes list screen — Phase 5.2 (simplified).
 
 Shows all notes inside a specific notebook.
-FAB opens a type-picker (Text / Image / Doodle) then navigates to the editor.
+FAB creates a new unified note immediately and navigates to the editor.
 Long-press a note to delete it.
 """
 from __future__ import annotations
@@ -51,7 +51,7 @@ def build(page: ft.Page, notebook_id: int) -> ft.View:
     )
 
     def _open_note(note_id: int, note_type: str) -> None:
-        page.run_task(page.push_route, f"/note_editor/{notebook_id}/{note_id}/{note_type}")
+        page.run_task(page.push_route, f"/note_editor/{notebook_id}/{note_id}")
 
     def _delete_note(note_id: int) -> None:
         def _do_delete(dlg: ft.AlertDialog) -> None:
@@ -72,6 +72,7 @@ def build(page: ft.Page, notebook_id: int) -> ft.View:
             ],
             actions_alignment=ft.MainAxisAlignment.END,
         )
+        dlg.on_dismiss = _on_dlg_dismiss(dlg)
         page.overlay.append(dlg)
         dlg.open = True
         page.update()
@@ -79,16 +80,16 @@ def build(page: ft.Page, notebook_id: int) -> ft.View:
     def _close_dlg(dlg: ft.AlertDialog) -> None:
         dlg.open = False
         page.update()
-        if dlg in page.overlay:
-            page.overlay.remove(dlg)
-        page.update()
+
+    def _on_dlg_dismiss(d: ft.AlertDialog):
+        def handler(e: ft.ControlEvent) -> None:
+            if d in page.overlay:
+                page.overlay.remove(d)
+            page.update()
+        return handler
 
     def _type_icon(note_type: str) -> str:
-        return {
-            "text": ft.Icons.ARTICLE_OUTLINED,
-            "image": ft.Icons.IMAGE_OUTLINED,
-            "doodle": ft.Icons.BRUSH_OUTLINED,
-        }.get(note_type, ft.Icons.NOTE_OUTLINED)
+        return ft.Icons.ARTICLE_OUTLINED if note_type in ("text", "unified") else ft.Icons.NOTE_OUTLINED
 
     def _format_date(iso: str) -> str:
         try:
@@ -151,76 +152,11 @@ def build(page: ft.Page, notebook_id: int) -> ft.View:
         page.update()
 
     # ------------------------------------------------------------------ #
-    # FAB: pick note type then create
+    # FAB: create a unified note immediately
     # ------------------------------------------------------------------ #
-    def _show_type_picker() -> None:
-        def _pick(note_type: str, dlg: ft.AlertDialog) -> None:
-            _close_dlg(dlg)
-            # Create the note immediately so the editor has an ID
-            note = note_svc.create_note(notebook_id, note_type)
-            page.run_task(page.push_route, f"/note_editor/{notebook_id}/{note.id}/{note_type}")
-
-        dlg = ft.AlertDialog(
-            title=ft.Text("New note type"),
-            content=ft.Column(
-                [
-                    ft.Container(
-                        content=ft.Row(
-                            [
-                                ft.Icon(ft.Icons.ARTICLE_OUTLINED, color=ft.Colors.PRIMARY),
-                                ft.Text("Text note", size=15),
-                            ],
-                            spacing=12,
-                        ),
-                        padding=12,
-                        border_radius=10,
-                        on_click=lambda e, d=None: None,  # replaced below
-                        bgcolor=ft.Colors.SURFACE_CONTAINER,
-                    ),
-                    ft.Container(
-                        content=ft.Row(
-                            [
-                                ft.Icon(ft.Icons.IMAGE_OUTLINED, color=ft.Colors.TERTIARY),
-                                ft.Text("Image note", size=15),
-                            ],
-                            spacing=12,
-                        ),
-                        padding=12,
-                        border_radius=10,
-                        bgcolor=ft.Colors.SURFACE_CONTAINER,
-                        on_click=lambda e, d=None: None,  # replaced below
-                    ),
-                    ft.Container(
-                        content=ft.Row(
-                            [
-                                ft.Icon(ft.Icons.BRUSH_OUTLINED, color=ft.Colors.SECONDARY),
-                                ft.Text("Doodle note", size=15),
-                            ],
-                            spacing=12,
-                        ),
-                        padding=12,
-                        border_radius=10,
-                        bgcolor=ft.Colors.SURFACE_CONTAINER,
-                        on_click=lambda e, d=None: None,  # replaced below
-                    ),
-                ],
-                spacing=10,
-                tight=True,
-            ),
-            actions=[
-                ft.TextButton("Cancel", on_click=lambda e: _close_dlg(dlg)),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
-        )
-
-        # Wire up on_click with the dialog reference
-        dlg.content.controls[0].on_click = lambda e: _pick("text", dlg)
-        dlg.content.controls[1].on_click = lambda e: _pick("image", dlg)
-        dlg.content.controls[2].on_click = lambda e: _pick("doodle", dlg)
-
-        page.overlay.append(dlg)
-        dlg.open = True
-        page.update()
+    def _create_note() -> None:
+        note = note_svc.create_note(notebook_id, "unified")
+        page.run_task(page.push_route, f"/note_editor/{notebook_id}/{note.id}")
 
     # ------------------------------------------------------------------ #
     # Initial load
@@ -254,7 +190,7 @@ def build(page: ft.Page, notebook_id: int) -> ft.View:
                     ft.Container(
                         content=ft.FloatingActionButton(
                             icon=ft.Icons.ADD,
-                            on_click=lambda e: _show_type_picker(),
+                            on_click=lambda e: _create_note(),
                             tooltip="New note",
                         ),
                         right=16,
