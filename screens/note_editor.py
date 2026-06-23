@@ -1,398 +1,632 @@
-"""Note editor screen — Phase 5.3 (text) + 5.4 (image).
+"""Unified note editor — write and draw on the same surface.
 
-Routes to this screen: /note_editor/{notebook_id}/{note_id}/{note_type}
+Route: /note_editor/{notebook_id}/{note_id}
 
-Behaviour:
-- Text notes: title field + full-screen content area, debounced auto-save (500ms).
-- Image notes: ``ft.FilePicker`` for gallery, multi-image horizontal strip.
-- Doodle notes: DoodleCanvas component; Save button persists the PNG.
+Layout
+------
+  AppBar  [title]                           [draw/write toggle]
+  ─────────────────────────────────────────────────────────────
+  [B] [I] [U̲]                   …  [saved]  ← format bar (write mode)
+  [●●●  colours  ●●●] [○○ sizes] [clear]   ← draw bar   (draw mode)
+  ─────────────────────────────────────────────────────────────
+  ft.Stack (expand)
+    ├─ text layer  (title, date, content — Calibri)
+    └─ transparent canvas overlay (visible only in draw mode)
+
+The canvas has no background colour so text stays visible while drawing
+directly on top of it — OneNote style.
 """
 from __future__ import annotations
 
+import json
+import re
 import threading
-from pathlib import Path
+from datetime import datetime
 
 import flet as ft
+import flet.canvas as cv
 
-from components import doodle_canvas as dc
 from services.note_service import NoteService
 
+# ── drawing constants ────────────────────────────────────────────────────────
+_PALETTE: list[str] = [
+    "#F44336",  # red
+    "#212121",  # near-black
+    "#2196F3",  # blue
+    "#4CAF50",  # green
+    "#FF9800",  # orange
+    "#9C27B0",  # purple
+    "#795548",  # brown
+    "#FFFFFF",  # white
+]
+_PEN_SIZES: list[int] = [3, 6, 14]
 
-def build(page: ft.Page, notebook_id: int, note_id: int, note_type: str) -> ft.View:
-    """Build and return the note-editor view."""
+
+def apply_text_format(
+    text: str,
+    start: int,
+    end: int,
+    open_tag: str,
+    close_tag: str,
+    placeholder: str,
+) -> str:
+    """Return *text* with formatting tags applied.
+
+    Rules
+    -----
+    * ``0 <= start < end``  →  wrap ``text[start:end]`` between the tags.
+    * otherwise             →  insert ``open_tag + placeholder + close_tag``
+                               at position *start* (or appended if start < 0).
+
+    This is a pure function — no Flet dependency — so it can be unit-tested
+    without a running page.
+    """
+    if 0 <= start < end:
+        return text[:start] + open_tag + text[start:end] + close_tag + text[end:]
+    pos = start if start >= 0 else len(text)
+    return text[:pos] + open_tag + placeholder + close_tag + text[pos:]
+
+
+def parse_markdown_spans(text: str) -> list[ft.TextSpan]:
+    """Convert **bold**, _italic_, <u>underline</u> markers into a TextSpan list.
+
+    This is a pure function — no Flet page required — so it can be unit-tested
+    directly alongside apply_text_format.
+    """
+    spans: list[ft.TextSpan] = []
+    pattern = r"(\*\*(.*?)\*\*|_(.*?)_|<u>(.*?)</u>)"
+    last_end = 0
+    for match in re.finditer(pattern, text, re.DOTALL):
+        start, end = match.span()
+        if start > last_end:
+            spans.append(ft.TextSpan(text[last_end:start]))
+        bold_content = match.group(2)
+        italic_content = match.group(3)
+        underline_content = match.group(4)
+        if bold_content is not None:
+            spans.append(ft.TextSpan(bold_content, ft.TextStyle(weight=ft.FontWeight.BOLD)))
+        elif italic_content is not None:
+            spans.append(ft.TextSpan(italic_content, ft.TextStyle(italic=True)))
+        elif underline_content is not None:
+            spans.append(ft.TextSpan(underline_content, ft.TextStyle(decoration=ft.TextDecoration.UNDERLINE)))
+        last_end = end
+    if last_end < len(text):
+        spans.append(ft.TextSpan(text[last_end:]))
+    return spans if spans else [ft.TextSpan(text)]
+
+
+def build(
+    page: ft.Page,
+    notebook_id: int,
+    note_id: int,
+    note_type: str = "unified",
+) -> ft.View:
+    """Build and return the unified note-editor view."""
     svc = NoteService.instance()
     note = svc.get_note_by_id(note_id)
 
     if note is None:
-        # Fallback if note was deleted
         return ft.View(
-            route=f"/note_editor/{notebook_id}/{note_id}/{note_type}",
+            route=f"/note_editor/{notebook_id}/{note_id}",
             appbar=ft.AppBar(title=ft.Text("Note not found")),
             controls=[ft.Text("This note no longer exists.")],
         )
 
     # ------------------------------------------------------------------ #
-    # Choose editor by type
+    # Shared state
     # ------------------------------------------------------------------ #
-    if note_type == "text":
-        content = _build_text_editor(page, svc, note, note_id)
-    elif note_type == "image":
-        content = _build_image_editor(page, svc, note_id)
-    elif note_type == "doodle":
-        content = _build_doodle_editor(page, svc, notebook_id, note_id)
-    else:
-        content = ft.Text("Unknown note type.")
-
-    return ft.View(
-        route=f"/note_editor/{notebook_id}/{note_id}/{note_type}",
-        appbar=ft.AppBar(
-            title=ft.Text(
-                {"text": "Text Note", "image": "Image Note", "doodle": "Doodle"}.get(
-                    note_type, "Note"
-                )
-            ),
-            center_title=False,
-            bgcolor=ft.Colors.SURFACE,
-        ),
-        controls=[content],
-        padding=0,
-        scroll=ft.ScrollMode.AUTO if note_type != "doodle" else ft.ScrollMode.HIDDEN,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Text editor (Phase 5.3)
-# ---------------------------------------------------------------------------
-
-def _build_text_editor(
-    page: ft.Page,
-    svc: NoteService,
-    note: object,
-    note_id: int,
-) -> ft.Container:
-    """Full-screen text editor with debounced auto-save."""
-
+    mode: list[str] = ["write"]                       # "write" | "draw"
     _timer: list[threading.Timer | None] = [None]
-    saved_indicator = ft.Text("", size=11, color=ft.Colors.OUTLINE)
+
+    # Drawing state — inline so the canvas can be truly transparent
+    _shapes: list[cv.Line] = []
+    _last_x: list[float | None] = [None]
+    _last_y: list[float | None] = [None]
+    _draw_color: list[str] = [_PALETTE[0]]
+    _draw_size: list[float] = [float(_PEN_SIZES[0])]
+    _preview: list[bool] = [False]            # write=edit, True=preview
+    # Selection saved on TextField blur — tapping a B/I/U button unfocuses
+    # the field before on_click fires, so we capture here and use it there.
+    _saved_selection: list[tuple[int, int]] = [(-1, -1)]
+
+    # Load any previously saved strokes
+    if note.content_strokes:
+        try:
+            for d in json.loads(note.content_strokes):
+                _shapes.append(
+                    cv.Line(
+                        x1=d["x1"], y1=d["y1"], x2=d["x2"], y2=d["y2"],
+                        paint=ft.Paint(
+                            color=d["color"],
+                            stroke_width=d["size"],
+                            style=ft.PaintingStyle.STROKE,
+                            stroke_cap=ft.StrokeCap.ROUND,
+                        ),
+                    )
+                )
+        except Exception:  # noqa: BLE001
+            pass  # corrupt stroke data — start fresh
+
+    # ------------------------------------------------------------------ #
+    # Text fields — Calibri font
+    # ------------------------------------------------------------------ #
+    saved_label = ft.Text("", size=11, color=ft.Colors.OUTLINE)
 
     title_field = ft.TextField(
-        value=getattr(note, "title", "") or "",
+        value=note.title or "",
         hint_text="Title",
         border=ft.InputBorder.NONE,
-        text_size=22,
-        text_style=ft.TextStyle(weight=ft.FontWeight.BOLD),
+        text_size=24,
+        text_style=ft.TextStyle(
+            weight=ft.FontWeight.BOLD,
+            font_family="Calibri",
+        ),
         max_length=500,
         expand=True,
     )
 
-    content_field = ft.TextField(
-        value=getattr(note, "content_text", "") or "",
-        hint_text="Start typing...",
-        border=ft.InputBorder.NONE,
-        multiline=True,
-        expand=True,
-        min_lines=20,
-        text_size=15,
-        max_length=50_000,
-    )
-
-    def _save_now() -> None:
+    # ------------------------------------------------------------------ #
+    # Auto-save (debounced 500 ms)
+    # ------------------------------------------------------------------ #
+    def _save_text_now() -> None:
         try:
             svc.update_note_text(
                 note_id,
                 title_field.value or "",
                 content_field.value or "",
             )
-            saved_indicator.value = "Saved"
+            saved_label.value = "Saved"
         except ValueError:
-            saved_indicator.value = "Too long"
-        saved_indicator.update()
+            saved_label.value = "Too long"
+        try:
+            if saved_label.page:
+                saved_label.update()
+        except RuntimeError:
+            pass
 
-    def _schedule_save(_: ft.ControlEvent) -> None:
+    def _save_strokes_now() -> None:
+        """Serialise _shapes to JSON and persist to the DB."""
+        try:
+            data = [
+                {
+                    "x1": s.x1, "y1": s.y1, "x2": s.x2, "y2": s.y2,
+                    "color": s.paint.color,
+                    "size": s.paint.stroke_width,
+                }
+                for s in _shapes
+            ]
+            svc.update_note_strokes(note_id, json.dumps(data))
+        except Exception:  # noqa: BLE001
+            pass  # don't interrupt the drawing experience on DB error
+
+    def _schedule_save(_: ft.ControlEvent | None) -> None:
         if _timer[0] is not None:
             _timer[0].cancel()
-        saved_indicator.value = "..."
-        saved_indicator.update()
-        _timer[0] = threading.Timer(0.5, _save_now)
+        saved_label.value = "\u2026"
+        try:
+            if saved_label.page:
+                saved_label.update()
+        except RuntimeError:
+            pass
+        _timer[0] = threading.Timer(0.5, _save_text_now)
         _timer[0].start()
 
-    title_field.on_change = _schedule_save
-    content_field.on_change = _schedule_save
+    def _capture_selection(e: ft.ControlEvent) -> None:  # noqa: ARG001
+        """Persist selection offsets when TextField loses focus.
 
-    # Toolbar: Bold / Italic / Checklist shortcuts
-    def _insert(snippet: str) -> None:
-        current = content_field.value or ""
-        content_field.value = current + snippet
-        content_field.update()
-        _schedule_save(None)  # type: ignore[arg-type]
+        Flutter fires blur *before* the tapped button's on_click, so by the
+        time _apply_format runs the TextField has already lost its selection.
+        Storing it here lets _apply_format use the correct offsets.
+        """
+        try:
+            sel = content_field.selection
+            lo = min(sel.base_offset, sel.extent_offset)
+            hi = max(sel.base_offset, sel.extent_offset)
+            _saved_selection[0] = (lo, hi)
+        except Exception:  # noqa: BLE001
+            _saved_selection[0] = (-1, -1)
 
-    toolbar = ft.Row(
-        [
-            ft.IconButton(
-                icon=ft.Icons.FORMAT_BOLD,
-                tooltip="Bold",
-                on_click=lambda e: _insert("**bold**"),
-            ),
-            ft.IconButton(
-                icon=ft.Icons.FORMAT_ITALIC,
-                tooltip="Italic",
-                on_click=lambda e: _insert("_italic_"),
-            ),
-            ft.IconButton(
-                icon=ft.Icons.CHECKLIST,
-                tooltip="Checklist item",
-                on_click=lambda e: _insert("\n- [ ] "),
-            ),
-            ft.Container(expand=True),
-            saved_indicator,
-        ],
-        spacing=4,
+    content_field = ft.TextField(
+        value=note.content_text or "",
+        hint_text="Start writing\u2026",
+        border=ft.InputBorder.NONE,
+        multiline=True,
+        min_lines=18,
+        text_size=16,
+        text_style=ft.TextStyle(font_family="Calibri"),
+        max_length=50_000,
+        expand=True,
+        on_change=_schedule_save,
+        on_blur=_capture_selection,
     )
 
-    return ft.Container(
+    # Preview layer — renders rich text visually
+    content_richtext = ft.Text(
+        spans=[],
+        expand=True,
+    )
+    content_preview_wrap = ft.Container(
+        content=content_richtext,
+        expand=True,
+        visible=False,  # shown only in preview mode
+    )
+    # Tapping the rendered area exits preview and returns to the TextField.
+    # Must also be invisible in edit mode so it doesn't block TextField touches.
+    content_preview_gesture = ft.GestureDetector(
+        content=content_preview_wrap,
+        on_tap=lambda e: _exit_preview(),
+        expand=True,
+        visible=False,
+    )
+
+    title_field.on_change = _schedule_save
+
+    # ------------------------------------------------------------------ #
+    # Preview helpers — entered automatically after B/I/U; exited on tap
+    # ------------------------------------------------------------------ #
+    def _enter_preview() -> None:
+        """Render content as RichText. Tap the content area to edit again."""
+        if _preview[0]:
+            return
+        _preview[0] = True
+        
+        text = content_field.value or ""
+        content_richtext.spans = parse_markdown_spans(text)
+
+        content_field.visible = False
+        content_preview_wrap.visible = True
+        content_preview_gesture.visible = True
+        try:
+            if content_field.page:
+                page.update()
+        except RuntimeError:
+            pass
+
+    def _exit_preview() -> None:
+        """Return to raw-text edit mode (TextField)."""
+        if not _preview[0]:
+            return
+        _preview[0] = False
+        _saved_selection[0] = (-1, -1)   # stale — user must re-select in edit mode
+        content_field.visible = True
+        content_preview_wrap.visible = False
+        content_preview_gesture.visible = False
+        try:
+            if content_field.page:
+                page.update()
+        except RuntimeError:
+            pass
+
+    # ------------------------------------------------------------------ #
+    # Format bar — B / I / U wrap the selection, then auto-show preview
+    # ------------------------------------------------------------------ #
+    def _apply_format(open_tag: str, close_tag: str, placeholder: str) -> None:
+        """Wrap selected text with *open_tag*/*close_tag*, then live-preview.
+
+        If currently in preview mode, drops back to edit mode so the user
+        can re-select text before clicking B/I/U again.
+        """
+        if _preview[0]:
+            _exit_preview()
+            return
+        text = content_field.value or ""
+        start, end = _saved_selection[0]
+        _saved_selection[0] = (-1, -1)  # consume — reset after each use
+        content_field.value = apply_text_format(
+            text, start, end, open_tag, close_tag, placeholder
+        )
+        try:
+            if content_field.page:
+                content_field.update()
+        except RuntimeError:
+            pass
+        _schedule_save(None)
+        _enter_preview()
+
+    format_bar = ft.Row(
+        [
+            ft.IconButton(
+                ft.Icons.FORMAT_BOLD,
+                tooltip="Bold \u2014 select text, then tap",
+                on_click=lambda e: _apply_format("**", "**", "bold"),
+            ),
+            ft.IconButton(
+                ft.Icons.FORMAT_ITALIC,
+                tooltip="Italic \u2014 select text, then tap",
+                on_click=lambda e: _apply_format("_", "_", "italic"),
+            ),
+            ft.IconButton(
+                ft.Icons.FORMAT_UNDERLINED,
+                tooltip="Underline \u2014 select text, then tap",
+                on_click=lambda e: _apply_format("<u>", "</u>", "underline"),
+            ),
+            ft.Container(expand=True),
+            saved_label,
+        ],
+        spacing=2,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+
+    # ------------------------------------------------------------------ #
+    # Transparent canvas overlay
+    # No bgcolor on the parent Container → text layer shows through
+    # ------------------------------------------------------------------ #
+    _canvas = cv.Canvas(shapes=_shapes, expand=True)
+
+    def _pan_start(e: ft.DragStartEvent) -> None:
+        # DragStartEvent has no local_position in Flet 0.85.x — reset
+        # so the first pan_update only anchors, never draws a lone dot.
+        _last_x[0] = None
+        _last_y[0] = None
+
+    def _pan_update(e: ft.DragUpdateEvent) -> None:
+        x2: float = e.local_position.x
+        y2: float = e.local_position.y
+        if _last_x[0] is not None and _last_y[0] is not None:
+            _shapes.append(
+                cv.Line(
+                    x1=_last_x[0],
+                    y1=_last_y[0],
+                    x2=x2,
+                    y2=y2,
+                    paint=ft.Paint(
+                        color=_draw_color[0],
+                        stroke_width=_draw_size[0],
+                        style=ft.PaintingStyle.STROKE,
+                        stroke_cap=ft.StrokeCap.ROUND,
+                    ),
+                )
+            )
+            try:
+                if _canvas.page:
+                    _canvas.update()
+            except RuntimeError:
+                pass
+        _last_x[0] = x2
+        _last_y[0] = y2
+
+    def _pan_end(e: ft.DragEndEvent) -> None:
+        _last_x[0] = None
+        _last_y[0] = None
+        _save_strokes_now()  # persist each completed stroke immediately
+
+    # canvas_layer is ALWAYS visible so strokes persist when in write mode.
+    # gesture_catcher is a transparent overlay that intercepts touch only in
+    # draw mode — hiding it gives text fields back their input focus.
+    canvas_layer = ft.Container(content=_canvas, expand=True)
+    gesture_catcher = ft.GestureDetector(
+        content=ft.Container(expand=True),  # transparent — no canvas here
+        on_pan_start=_pan_start,
+        on_pan_update=_pan_update,
+        on_pan_end=_pan_end,
+        drag_interval=8,
+        expand=True,
+        visible=False,  # shown only in draw mode
+    )
+
+    # ------------------------------------------------------------------ #
+    # Draw toolbar — colour palette + size selector + clear
+    # ------------------------------------------------------------------ #
+    # Forward-declare so _refresh_draw_bar can reference them
+    _color_row: ft.Row
+    _size_row: ft.Row
+
+    def _color_dot(c: str) -> ft.Container:
+        selected = c == _draw_color[0]
+        return ft.Container(
+            bgcolor=c,
+            width=22,
+            height=22,
+            border_radius=11,
+            border=ft.Border(
+                left=ft.BorderSide(2, ft.Colors.PRIMARY),
+                top=ft.BorderSide(2, ft.Colors.PRIMARY),
+                right=ft.BorderSide(2, ft.Colors.PRIMARY),
+                bottom=ft.BorderSide(2, ft.Colors.PRIMARY),
+            )
+            if selected
+            else None,
+            on_click=lambda e, col=c: _set_color(col),
+        )
+
+    def _size_dot(s: int) -> ft.Container:
+        selected = s == int(_draw_size[0])
+        dim = min(s * 3, 28)
+        return ft.Container(
+            bgcolor=ft.Colors.ON_SURFACE,
+            width=dim,
+            height=dim,
+            border_radius=dim // 2,
+            border=ft.Border(
+                left=ft.BorderSide(2, ft.Colors.PRIMARY),
+                top=ft.BorderSide(2, ft.Colors.PRIMARY),
+                right=ft.BorderSide(2, ft.Colors.PRIMARY),
+                bottom=ft.BorderSide(2, ft.Colors.PRIMARY),
+            )
+            if selected
+            else None,
+            on_click=lambda e, sz=s: _set_size(sz),
+        )
+
+    def _refresh_draw_bar() -> None:
+        _color_row.controls = [_color_dot(c) for c in _PALETTE]
+        _size_row.controls = [_size_dot(s) for s in _PEN_SIZES]
+        try:
+            if _color_row.page:
+                _color_row.update()
+                _size_row.update()
+        except RuntimeError:
+            pass
+
+    def _set_color(c: str) -> None:
+        _draw_color[0] = c
+        _refresh_draw_bar()
+
+    def _set_size(s: int) -> None:
+        _draw_size[0] = float(s)
+        _refresh_draw_bar()
+
+    def _clear_canvas() -> None:
+        _shapes.clear()
+        try:
+            if _canvas.page:
+                _canvas.update()
+        except RuntimeError:
+            pass
+
+    _color_row = ft.Row(
+        controls=[_color_dot(c) for c in _PALETTE],
+        spacing=4,
+        scroll=ft.ScrollMode.AUTO,
+    )
+    _size_row = ft.Row(
+        controls=[_size_dot(s) for s in _PEN_SIZES],
+        spacing=6,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+    )
+
+    draw_bar = ft.Row(
+        [
+            _color_row,
+            ft.VerticalDivider(width=1),
+            _size_row,
+            ft.Container(expand=True),
+            ft.IconButton(
+                ft.Icons.DELETE_SWEEP_OUTLINED,
+                tooltip="Clear drawing",
+                on_click=lambda e: _clear_canvas(),
+            ),
+        ],
+        spacing=4,
+        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        visible=False,
+    )
+
+    # ------------------------------------------------------------------ #
+    # Mode toggle (AppBar action)
+    # ------------------------------------------------------------------ #
+    mode_btn = ft.IconButton(
+        icon=ft.Icons.BRUSH_OUTLINED,
+        tooltip="Draw mode",
+    )
+
+    def _toggle_mode(e: ft.ControlEvent) -> None:
+        if mode[0] == "write":
+            if _timer[0] is not None:
+                _timer[0].cancel()
+            _save_text_now()
+            mode[0] = "draw"
+            gesture_catcher.visible = True   # enable touch capture
+            format_bar.visible = False
+            draw_bar.visible = True
+            mode_btn.icon = ft.Icons.EDIT_OUTLINED
+            mode_btn.tooltip = "Write mode"
+        else:
+            mode[0] = "write"
+            _save_strokes_now()          # persist doodles before releasing keyboard
+            gesture_catcher.visible = False  # release touch to text fields
+            format_bar.visible = True
+            draw_bar.visible = False
+            mode_btn.icon = ft.Icons.BRUSH_OUTLINED
+            mode_btn.tooltip = "Draw mode"
+            _exit_preview()              # always land in TextField after leaving draw
+            # canvas_layer stays visible — strokes are preserved
+        try:
+            if mode_btn.page:
+                mode_btn.update()
+        except RuntimeError:
+            pass
+        page.update()
+
+    mode_btn.on_click = _toggle_mode
+
+    # ------------------------------------------------------------------ #
+    # Date / time display
+    # ------------------------------------------------------------------ #
+    _created = note.created_at
+    if isinstance(_created, str):
+        try:
+            _created = datetime.fromisoformat(_created)
+        except ValueError:
+            _created = datetime.now()
+    dt = _created or datetime.now()
+    date_str = f"{dt.day} {dt.strftime('%B %Y')}   {dt.strftime('%H:%M')}"
+
+    # ------------------------------------------------------------------ #
+    # Main stack: text layer (bottom) + transparent canvas (top)
+    # ------------------------------------------------------------------ #
+    text_layer = ft.Container(
         content=ft.Column(
             [
-                ft.Container(content=toolbar, padding=ft.Padding.symmetric(horizontal=8, vertical=4)),
+                ft.Container(
+                    content=title_field,
+                    padding=ft.Padding(left=16, top=8, right=16, bottom=0),
+                ),
+                ft.Container(
+                    content=ft.Text(
+                        date_str,
+                        size=12,
+                        color=ft.Colors.OUTLINE,
+                        font_family="Calibri",
+                    ),
+                    padding=ft.Padding(left=16, top=2, right=16, bottom=4),
+                ),
                 ft.Divider(height=1),
                 ft.Container(
-                    content=ft.Column(
-                        [
-                            title_field,
-                            ft.Divider(height=1),
-                            content_field,
-                        ],
-                        spacing=0,
+                    content=ft.Stack(
+                        [content_field, content_preview_gesture],
+                        expand=True,
                     ),
-                    padding=ft.Padding.symmetric(horizontal=16, vertical=8),
+                    padding=ft.Padding(left=16, top=8, right=16, bottom=16),
                     expand=True,
                 ),
             ],
-            expand=True,
             spacing=0,
-        ),
-        expand=True,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Image editor (Phase 5.4)
-# ---------------------------------------------------------------------------
-
-def _build_image_editor(
-    page: ft.Page,
-    svc: NoteService,
-    note_id: int,
-) -> ft.Container:
-    """Displays existing images and allows adding new ones via FilePicker."""
-
-    images_row = ft.Row(
-        spacing=8,
-        scroll=ft.ScrollMode.AUTO,
-        height=220,
-    )
-
-    def _refresh_images() -> None:
-        images_row.controls.clear()
-        imgs = svc.get_images_for_note(note_id)
-        for img_rec in imgs:
-            abs_path = svc.resolve_image_path(img_rec.image_path)
-            if Path(abs_path).is_file():
-                thumb = ft.Container(
-                    content=ft.Stack(
-                        [
-                            ft.Image(
-                                src=abs_path,
-                                width=200,
-                                height=200,
-                                fit=ft.BoxFit.COVER,
-                                border_radius=12,
-                            ),
-                            ft.Container(
-                                content=ft.IconButton(
-                                    icon=ft.Icons.DELETE_OUTLINE,
-                                    icon_color=ft.Colors.WHITE,
-                                    icon_size=20,
-                                    on_click=lambda e, iid=img_rec.id: _delete_img(iid),
-                                    tooltip="Remove",
-                                ),
-                                right=4,
-                                top=4,
-                            ),
-                        ]
-                    ),
-                    width=200,
-                    height=200,
-                    border_radius=12,
-                    clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
-                )
-                images_row.controls.append(thumb)
-        if images_row.page:
-            images_row.update()
-
-    def _delete_img(image_id: int) -> None:
-        svc.delete_image(image_id)
-        _refresh_images()
-
-    async def _pick_images(_: ft.ControlEvent) -> None:
-        files = await page.run_task(
-            file_picker.pick_files,
-            dialog_title="Select images",
-            file_type=ft.FilePickerFileType.IMAGE,
-            allow_multiple=True,
-        )
-        if not files:
-            return
-        for f in files:
-            if f.path:
-                try:
-                    svc.add_image(note_id, f.path)
-                except (ValueError, OSError):
-                    pass
-        _refresh_images()
-
-    file_picker = ft.FilePicker()
-    page.overlay.append(file_picker)
-    page.update()
-    # Populate images_row.controls during build (no .update() call needed yet —
-    # the control isn't on the page yet, but controls list is set before render).
-    _refresh_images()
-
-    empty_hint = ft.Text(
-        "Tap the button below to add images from your gallery.",
-        size=14,
-        color=ft.Colors.OUTLINE,
-        text_align=ft.TextAlign.CENTER,
-    )
-
-    return ft.Container(
-        content=ft.Column(
-            [
-                ft.Container(
-                    content=ft.Column(
-                        [
-                            ft.Icon(ft.Icons.IMAGE_OUTLINED, size=48, color=ft.Colors.OUTLINE),
-                            empty_hint,
-                        ],
-                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                        spacing=8,
-                    ),
-                    padding=24,
-                    alignment=ft.Alignment(0, 0),
-                ),
-                ft.Container(
-                    content=images_row,
-                    padding=ft.Padding.symmetric(horizontal=16, vertical=8),
-                ),
-                ft.Container(
-                    content=ft.ElevatedButton(
-                        "Add Images",
-                        icon=ft.Icons.ADD_PHOTO_ALTERNATE_OUTLINED,
-                        on_click=_pick_images,
-                    ),
-                    padding=16,
-                    alignment=ft.Alignment(0, 0),
-                ),
-            ],
-            spacing=0,
-        ),
-        expand=True,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Doodle editor (Phase 5.5 integration)
-# ---------------------------------------------------------------------------
-
-def _build_doodle_editor(
-    page: ft.Page,
-    svc: NoteService,
-    notebook_id: int,
-    note_id: int,
-) -> ft.Container:
-    """Displays existing doodle (if any) or a fresh canvas, then saves as PNG."""
-
-    saved_doodle_img = ft.Container(visible=False)
-    canvas_container = ft.Container()
-
-    result_text = ft.Text("", size=12, color=ft.Colors.OUTLINE)
-
-    def _on_doodle_save(png_path: str) -> None:
-        """Called by doodle_canvas when user taps Save."""
-        try:
-            doodle_rec = svc.save_doodle(note_id, png_path)
-            # Show saved image
-            abs_path = svc.resolve_doodle_path(doodle_rec.doodle_path)
-            saved_doodle_img.content = ft.Image(
-                src=abs_path,
-                width=340,
-                height=420,
-                fit=ft.BoxFit.CONTAIN,
-                border_radius=12,
-            )
-            saved_doodle_img.visible = True
-            canvas_container.visible = False
-            result_text.value = "Doodle saved!"
-            page.update()
-        except (ValueError, OSError) as exc:
-            result_text.value = f"Save failed: {exc}"
-            page.update()
-
-    def _show_canvas(_: ft.ControlEvent) -> None:
-        canvas_container.visible = True
-        saved_doodle_img.visible = False
-        result_text.value = ""
-        page.update()
-
-    canvas_widget = dc.build_doodle_canvas(on_save=_on_doodle_save)
-    canvas_container.content = canvas_widget
-
-    # Load existing doodle if there is one
-    doodles = svc.get_doodles_for_note(note_id)
-    if doodles:
-        last = doodles[-1]
-        abs_path = svc.resolve_doodle_path(last.doodle_path)
-        from pathlib import Path as _Path
-        if _Path(abs_path).is_file():
-            saved_doodle_img.content = ft.Image(
-                src=abs_path,
-                width=340,
-                height=420,
-                fit=ft.BoxFit.CONTAIN,
-                border_radius=12,
-            )
-            saved_doodle_img.visible = True
-            canvas_container.visible = False
-        else:
-            canvas_container.visible = True
-    else:
-        canvas_container.visible = True
-
-    return ft.Container(
-        content=ft.Column(
-            [
-                ft.Container(
-                    content=ft.Column(
-                        [
-                            saved_doodle_img,
-                            canvas_container,
-                            result_text,
-                            ft.Container(
-                                content=ft.TextButton(
-                                    "Draw new doodle",
-                                    icon=ft.Icons.BRUSH_OUTLINED,
-                                    on_click=_show_canvas,
-                                ),
-                                alignment=ft.Alignment(0, 0),
-                            ),
-                        ],
-                        spacing=12,
-                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    ),
-                    padding=16,
-                ),
-            ],
-            scroll=ft.ScrollMode.AUTO,
             expand=True,
         ),
         expand=True,
+    )
+
+    main_stack = ft.Stack(
+        # canvas_layer is bottom (strokes visible but non-interactive).
+        # text_layer is middle (text fields receive focus in write mode).
+        # gesture_catcher is top and only shown in draw mode — when visible
+        # it intercepts all touches for drawing; when hidden it lets
+        # text_layer below it handle focus normally.
+        controls=[canvas_layer, text_layer, gesture_catcher],
+        expand=True,
+    )
+
+    # ------------------------------------------------------------------ #
+    # View assembly
+    # ------------------------------------------------------------------ #
+    display_title = (note.title or "Untitled")[:40]
+
+    return ft.View(
+        route=f"/note_editor/{notebook_id}/{note_id}",
+        appbar=ft.AppBar(
+            title=ft.Text(display_title),
+            center_title=False,
+            bgcolor=ft.Colors.SURFACE,
+            actions=[mode_btn],
+        ),
+        controls=[
+            ft.Column(
+                [
+                    ft.Container(
+                        content=format_bar,
+                        padding=ft.Padding(left=8, top=2, right=8, bottom=2),
+                    ),
+                    ft.Container(
+                        content=draw_bar,
+                        padding=ft.Padding(left=8, top=2, right=8, bottom=2),
+                    ),
+                    ft.Divider(height=1),
+                    main_stack,
+                ],
+                spacing=0,
+                expand=True,
+            )
+        ],
+        padding=0,
     )

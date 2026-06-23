@@ -68,19 +68,24 @@ print('Layer check OK')
 
 # --- Step 4: API contract check (Flet forbidden patterns) ---
 Step "Flet API contract check" {
+    # Case-sensitive patterns: ft\.colors\. / ft\.icons\. must only match the deprecated
+    # lowercase namespaces, NOT the correct ft.Colors.* / ft.Icons.* (capital letter).
+    # \btext=" uses a word boundary so hint_text= / label_text= are not false-positives.
     $patterns = @(
         'ft\.border\.all\(', 'page\.go\(', 'page\.open\(', 'page\.show_dialog\(',
-        'ft\.ElevatedButton\(', 'ft\.OutlinedButton\(', 'text="', 'name="',
-        'prefix_text=', 'suffix_text=', 'ScrollMode\.DISABLED', 'ft\.colors\.', 'ft\.icons\.'
+        'ft\.ElevatedButton\(', 'ft\.OutlinedButton\(', '\btext="', '\bname="',
+        'prefix_text=', 'suffix_text=', 'ScrollMode\.DISABLED', 'ft\.colors\.', 'ft\.icons\.',
+        'ft\.alignment\.', 'ft\.padding\.',
+        '_apply_format\("[^"]*",\s*"[^"]*"\)'
     )
     $targets = Get-ChildItem -Recurse -Include *.py -Path screens, components, main.py -ErrorAction SilentlyContinue
     $hits = @()
     foreach ($p in $patterns) {
-        $hits += Select-String -Path $targets -Pattern $p -ErrorAction SilentlyContinue
+        $hits += Select-String -Path $targets -Pattern $p -CaseSensitive -ErrorAction SilentlyContinue
     }
     if ($hits.Count -gt 0) {
         $hits | ForEach-Object { Write-Host "FORBIDDEN PATTERN: $($_.Path):$($_.LineNumber): $($_.Line.Trim())" }
-        throw "$($hits.Count) forbidden Flet API pattern(s) found — see flet-api.instructions.md"
+        throw "$($hits.Count) forbidden Flet API pattern(s) found - see flet-api.instructions.md"
     }
 }
 
