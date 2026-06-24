@@ -24,6 +24,8 @@ lookup table, not a story.
 
 | 2026-06-24 | `NameError: name 'get_bus' is not defined` in `ChatMessageRepository.clear_all()` | `get_bus` called at line 51 of `chat_message_repository.py` but only `Events` is imported from `observers.event_bus` — `get_bus` was omitted from the import | Add `get_bus` to the import: `from observers.event_bus import Events, get_bus` | `tests/test_chat_message_repository.py::TestClearAll` |
 
+| 2026-06-24 | `AttributeError: 'super' object has no attribute '__getattr__'` on `ft.Colors.SURFACE_VARIANT` (chat.py line 19) | `ft.Colors.SURFACE_VARIANT` does not exist in Flet 0.85.3 — the grep check only blocks lowercase `ft.colors.` patterns, so invalid PascalCase color names silently pass the contract check and raise at module import time | Replace with a valid color: `ft.Colors.SURFACE_CONTAINER` or `ft.Colors.SURFACE_CONTAINER_HIGH`. Note: `ft.Colors.ON_SURFACE_VARIANT` **is** valid; only the background tile `SURFACE_VARIANT` is missing. | UI smoke test (Step 4); grep check has a gap for PascalCase color names — see below |
+
 ## How to add an entry
 ```
 | 2026-06-21 | <what broke / error message> | <why> | <the fix> | <which file/check now catches it> |

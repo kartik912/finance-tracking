@@ -550,3 +550,60 @@ class TestInvestmentsScreen:
         import screens.investments as m
         view = m.build(page)  # type: ignore[arg-type]
         assert view is not None
+
+
+# ---------------------------------------------------------------------------
+# chat.py  (Phase 6.3)
+# ---------------------------------------------------------------------------
+
+class TestChatScreen:
+    def test_build_empty_db(self, page: _FakePage) -> None:
+        """build() must not raise on empty DB with no API key configured."""
+        import screens.chat as m
+        view = m.build(page)  # type: ignore[arg-type]
+        assert view is not None
+
+    def test_build_returns_view(self, page: _FakePage) -> None:
+        """build() must return a View with route='/chat'."""
+        import screens.chat as m
+        view = m.build(page)  # type: ignore[arg-type]
+        assert hasattr(view, "route")
+        assert view.route == "/chat"
+
+    def test_build_with_history(self, page: _FakePage) -> None:
+        """build() must not raise when DB already contains chat messages."""
+        from models.chat_message import ChatMessage
+        from repositories.chat_message_repository import ChatMessageRepository
+        repo = ChatMessageRepository()
+        repo.insert(ChatMessage(
+            role="user",
+            content="How do I save money?",
+            timestamp="2026-01-01T10:00:00",
+        ))
+        repo.insert(ChatMessage(
+            role="model",
+            content="Start by tracking your expenses.",
+            timestamp="2026-01-01T10:00:01",
+        ))
+        import screens.chat as m
+        view = m.build(page)  # type: ignore[arg-type]
+        assert view is not None
+
+
+# ---------------------------------------------------------------------------
+# api_key_config.py  (Phase 6.2)
+# ---------------------------------------------------------------------------
+
+class TestApiKeyConfigScreen:
+    def test_build_empty_db(self, page: _FakePage) -> None:
+        """build() must not raise even when config.json has no API key."""
+        import screens.api_key_config as m
+        view = m.build(page)  # type: ignore[arg-type]
+        assert view is not None
+
+    def test_build_returns_view(self, page: _FakePage) -> None:
+        """build() must return a View with route='/settings/api_key'."""
+        import screens.api_key_config as m
+        view = m.build(page)  # type: ignore[arg-type]
+        assert hasattr(view, "route")
+        assert view.route == "/settings/api_key"

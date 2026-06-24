@@ -43,10 +43,10 @@ a file that's reloaded into every chat turn.
 - 5.4 ✅ Image note (model, service, add_image)
 - 5.5 ✅ Doodle canvas (`components/doodle_canvas.py`, canvas overlay in note_editor)
 
-## Phase 6 — AI Chatbot 🔄
+## Phase 6 — AI Chatbot ✅
 - 6.1 ✅ Gemini service (`services/gemini_service.py`, `repositories/chat_message_repository.py` extended)
-- 6.2 ⬜ API key config screen
-- 6.3 ⬜ Chat screen
+- 6.2 ✅ API key config screen (`screens/api_key_config.py`, route `/settings/api_key`)
+- 6.3 ✅ Chat screen (`screens/chat.py`, route `/chat`, 6th nav tab)
 
 ## Phase 7 — Polish & Build
 - 7.1 ⬜ Theme

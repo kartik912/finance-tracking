@@ -33,16 +33,18 @@ from services.cache_service import CacheService
 # Screens are imported lazily inside the route handler to keep startup fast.
 
 ROUTES: dict[str, str] = {
-    "/":             "screens.dashboard",
-    "/finance":      "screens.finance_tracker",
-    "/investments":  "screens.investments",
-    "/goals":        "screens.goals",
-    "/notes":        "screens.notebooks",
-    "/splits":       "screens.bill_splits",
+    "/":                   "screens.dashboard",
+    "/finance":            "screens.finance_tracker",
+    "/investments":        "screens.investments",
+    "/goals":              "screens.goals",
+    "/notes":              "screens.notebooks",
+    "/splits":             "screens.bill_splits",
+    "/chat":               "screens.chat",
+    "/settings/api_key":   "screens.api_key_config",
 }
 
 # Tab index → route (matches NavigationBar destination order)
-TAB_ROUTES = ["/", "/finance", "/investments", "/goals", "/notes"]
+TAB_ROUTES = ["/", "/finance", "/investments", "/goals", "/notes", "/chat"]
 
 # Module-level reference to the NavigationBar, set in main() and read by
 # _route_change(). Required because page.navigation_bar reads from views[0]
@@ -108,6 +110,11 @@ def _build_nav_bar(page: ft.Page) -> ft.NavigationBar:
                 icon=ft.Icons.BOOK_OUTLINED,
                 selected_icon=ft.Icons.BOOK,
                 label="Notes",
+            ),
+            ft.NavigationBarDestination(
+                icon=ft.Icons.SMART_TOY_OUTLINED,
+                selected_icon=ft.Icons.SMART_TOY,
+                label="AI Chat",
             ),
         ],
     )
