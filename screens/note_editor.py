@@ -212,11 +212,11 @@ def build(
         _timer[0].start()
 
     def _capture_selection(e: ft.ControlEvent) -> None:  # noqa: ARG001
-        """Persist selection offsets when TextField loses focus.
+        """Keep _saved_selection in sync with the live text selection.
 
-        Flutter fires blur *before* the tapped button's on_click, so by the
-        time _apply_format runs the TextField has already lost its selection.
-        Storing it here lets _apply_format use the correct offsets.
+        Wired to on_selection_change so the offsets are captured while the
+        selection is still active — on_blur fires after Flutter clears it,
+        which caused the 'world**bold**' bug (selection always read as empty).
         """
         try:
             sel = content_field.selection
@@ -237,7 +237,7 @@ def build(
         max_length=50_000,
         expand=True,
         on_change=_schedule_save,
-        on_blur=_capture_selection,
+        on_selection_change=_capture_selection,
     )
 
     # Preview layer — renders rich text visually
@@ -291,6 +291,15 @@ def build(
         content_field.visible = True
         content_preview_wrap.visible = False
         content_preview_gesture.visible = False
+        # Reset the eye button icon whenever preview is exited (button tap OR
+        # tapping the preview area via the GestureDetector).
+        try:
+            preview_btn.icon = ft.Icons.VISIBILITY_OUTLINED
+            preview_btn.tooltip = "Preview formatted text"
+            if preview_btn.page:
+                preview_btn.update()
+        except Exception:  # noqa: BLE001
+            pass  # preview_btn may not exist yet during initial build
         try:
             if content_field.page:
                 page.update()
@@ -298,13 +307,37 @@ def build(
             pass
 
     # ------------------------------------------------------------------ #
-    # Format bar — B / I / U wrap the selection, then auto-show preview
+    # Preview toggle button — declared before format_bar so _toggle_preview
+    # can reference it; on_click is wired via lambda (late binding).
+    # ------------------------------------------------------------------ #
+    preview_btn = ft.IconButton(
+        ft.Icons.VISIBILITY_OUTLINED,
+        tooltip="Preview formatted text",
+        on_click=lambda e: _toggle_preview(),
+    )
+
+    def _toggle_preview() -> None:
+        """Switch between edit mode (raw markers) and preview (rendered)."""
+        if _preview[0]:
+            _exit_preview()  # also resets preview_btn icon
+        else:
+            _enter_preview()
+            preview_btn.icon = ft.Icons.EDIT_OUTLINED
+            preview_btn.tooltip = "Back to editing"
+            try:
+                if preview_btn.page:
+                    preview_btn.update()
+            except RuntimeError:
+                pass
+
+    # ------------------------------------------------------------------ #
+    # Format bar — B / I / U insert markers; eye button toggles preview
     # ------------------------------------------------------------------ #
     def _apply_format(open_tag: str, close_tag: str, placeholder: str) -> None:
-        """Wrap selected text with *open_tag*/*close_tag*, then live-preview.
+        """Wrap selected text with *open_tag*/*close_tag* and stay in edit mode.
 
-        If currently in preview mode, drops back to edit mode so the user
-        can re-select text before clicking B/I/U again.
+        If currently in preview mode, drops back to edit mode first so the
+        user can re-select text before clicking B/I/U again.
         """
         if _preview[0]:
             _exit_preview()
@@ -321,7 +354,8 @@ def build(
         except RuntimeError:
             pass
         _schedule_save(None)
-        _enter_preview()
+        # Stay in edit mode — **text** / _text_ markers remain visible.
+        # Tap the eye button to render the preview.
 
     format_bar = ft.Row(
         [
@@ -340,6 +374,8 @@ def build(
                 tooltip="Underline \u2014 select text, then tap",
                 on_click=lambda e: _apply_format("<u>", "</u>", "underline"),
             ),
+            ft.VerticalDivider(width=1),
+            preview_btn,
             ft.Container(expand=True),
             saved_label,
         ],

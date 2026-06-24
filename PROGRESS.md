@@ -36,16 +36,16 @@ a file that's reloaded into every chat turn.
 - 4.3 ✅ Category chart
 - 4.4 ✅ Quick-add FAB
 
-## Phase 5 — Notes Module
-- 5.1 ⬜ Notebooks grid
-- 5.2 ⬜ Notes list
-- 5.3 ⬜ Text note editor
-- 5.4 ⬜ Image note
-- 5.5 ⬜ Doodle canvas
+## Phase 5 — Notes Module ✅
+- 5.1 ✅ Notebooks grid (`screens/notebooks.py`)
+- 5.2 ✅ Notes list (`screens/notes_list.py`)
+- 5.3 ✅ Text note editor with bold/italic/underline + preview toggle
+- 5.4 ✅ Image note (model, service, add_image)
+- 5.5 ✅ Doodle canvas (`components/doodle_canvas.py`, canvas overlay in note_editor)
 
-## Phase 6 — AI Chatbot
-- 6.1 ⬜ Gemini service
-- 6.2 ⬜ API key config
+## Phase 6 — AI Chatbot 🔄
+- 6.1 ✅ Gemini service (`services/gemini_service.py`, `repositories/chat_message_repository.py` extended)
+- 6.2 ⬜ API key config screen
 - 6.3 ⬜ Chat screen
 
 ## Phase 7 — Polish & Build

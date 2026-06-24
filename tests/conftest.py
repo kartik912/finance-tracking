@@ -65,6 +65,10 @@ def fresh_db():
     NotebookService._instance = None  # type: ignore[attr-defined]
     NoteService._instance = None  # type: ignore[attr-defined]
 
+    # Reset Phase 6 service singletons
+    from services.gemini_service import GeminiService
+    GeminiService._instance = None  # type: ignore[attr-defined]
+
     # Reset EventBus so subscriptions from previous tests don't accumulate
     from observers.event_bus import EventBus
     EventBus._instance = None  # type: ignore[attr-defined]
@@ -79,4 +83,6 @@ def fresh_db():
     from services.note_service import NoteService
     NotebookService._instance = None  # type: ignore[attr-defined]
     NoteService._instance = None  # type: ignore[attr-defined]
+    from services.gemini_service import GeminiService
+    GeminiService._instance = None  # type: ignore[attr-defined]
     reset_db()

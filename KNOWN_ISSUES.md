@@ -22,6 +22,8 @@ lookup table, not a story.
 | 2026-06-20 | `AttributeError: 'DragStartEvent' object has no attribute 'local_x'` in `_on_pan_start` | Flet 0.85.x pan events use `e.local_position.x`/`e.local_position.y` (`Offset` object), not `e.local_x`/`e.local_y` | Use `e.local_position.x` and `e.local_position.y` on both `DragStartEvent` and `DragUpdateEvent` | `doodle_canvas.py` `_on_pan_start`/`_on_pan_update` |
 | 2026-06-23 | `AlertDialog` does not close on Cancel or after Create | Calling `page.overlay.remove(dlg)` inside `_close_dlg` (synchronously, inside a button `on_click`) races with Flutter's dismiss animation — the overlay removal cancels the animation before it completes, leaving the dialog visually frozen open. The correct pattern (from `dashboard.py`): `_close_dlg` ONLY sets `dlg.open = False; page.update()`. Each dialog has `on_dismiss=_on_dlg_dismiss(dlg)` where that handler removes from overlay after Flutter fires the dismiss callback. | `screens/notebooks.py`, `screens/notes_list.py` `_close_dlg`; rule now in `flet-api.instructions.md` §4 |
 
+| 2026-06-24 | `NameError: name 'get_bus' is not defined` in `ChatMessageRepository.clear_all()` | `get_bus` called at line 51 of `chat_message_repository.py` but only `Events` is imported from `observers.event_bus` — `get_bus` was omitted from the import | Add `get_bus` to the import: `from observers.event_bus import Events, get_bus` | `tests/test_chat_message_repository.py::TestClearAll` |
+
 ## How to add an entry
 ```
 | 2026-06-21 | <what broke / error message> | <why> | <the fix> | <which file/check now catches it> |
